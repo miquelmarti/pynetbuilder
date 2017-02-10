@@ -9,9 +9,13 @@ Convolution = dict(
 				bias_filler=dict(type='constant',value=0),
 				param=[dict(lr_mult=1, decay_mult=1), dict(lr_mult=2, decay_mult=0)]
 				)
-				
+
+Deconvolution = dict(
+				param=[dict(lr_mult=0)]
+				)
+
 BatchNorm = dict(
-				param=[dict(lr_mult=0, decay_mult=0), 
+				param=[dict(lr_mult=0, decay_mult=0),
 					dict(lr_mult=0, decay_mult=0), dict(lr_mult=0, decay_mult=0)],
 				in_place=True
 				)
@@ -21,7 +25,7 @@ InnerProduct = dict(
 				bias_filler= dict(type='constant'),
 				param= [dict(lr_mult=1, decay_mult=1), dict(lr_mult=2, decay_mult=0)]
 				)
-				
+
 Scale = dict(bias_term=True,in_place=True)
 ReLU = dict(in_place=True)
 
