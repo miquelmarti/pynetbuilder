@@ -9,6 +9,7 @@ Adapted from: https://github.com/shelhamer/fcn.berkeleyvision.org
 
 from base import BaseLego
 from base import BaseLegoFunction
+from base import Config
 
 from caffe.proto import caffe_pb2
 import google.protobuf as pb
@@ -43,13 +44,12 @@ class FCNAssembleLego(BaseLego):
         self._check_required_params(params)
         self.skip_source_layer = params['skip_source_layer']
         self.num_classes = params['num_classes']
-        self.is_train = params['is_train']
 
     def attach(self, netspec, bottom):
         # TODO: Attach the legos
 
         score_params = dict(name='score_top', bias_filler=dict(type='constant',
-                            value=0), kernel_size=1, pad=0,
+                            value=1), bias_term=True, kernel_size=1, pad=0,
                             num_output=self.num_classes)
         score_top = BaseLegoFunction('Convolution',
                                      score_params).attach(netspec, bottom)
@@ -62,7 +62,7 @@ class FCNAssembleLego(BaseLego):
                                     ).attach(netspec, [score_top])
 
         score_params = dict(name='score_skip', kernel_size=1, pad=0,
-                            num_output=self.num_classes,
+                            num_output=self.num_classes, bias_term=True,
                             bias_filler=dict(type='constant', value=1))
         score_skip = BaseLegoFunction(
             'Convolution', score_params).attach(
@@ -91,12 +91,7 @@ class FCNAssembleLego(BaseLego):
         scores = BaseLegoFunction('Crop', crop_params).attach(
             netspec, [upscore16, netspec['data']])
 
-        if self.is_train:
-            loss_param = dict(name='loss', loss_param=dict(normalize=False,
-                                                           ignore_label=255))
-            loss = BaseLegoFunction('SoftmaxWithLoss', loss_param).attach(
-                netspec, [scores, netspec['label']])
-        else:
-            loss_param = dict(name='loss')
-            loss = BaseLegoFunction('Softmax', loss_param).attach(
-                netspec, [scores])
+        loss_param = dict(name='loss', loss_param=dict(normalize=False,
+                                                       ignore_label=255))
+        loss = BaseLegoFunction('SoftmaxWithLoss', loss_param).attach(
+            netspec, [scores, netspec['label']])

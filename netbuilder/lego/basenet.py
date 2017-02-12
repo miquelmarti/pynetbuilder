@@ -1,0 +1,74 @@
+"""
+@author Miquel Marti miquelmr@kth.se
+"""
+
+from caffe import params as P
+import caffe
+
+from lego.base import BaseLegoFunction, BaseLego
+
+
+class ResNetLego(BaseLego):
+    '''
+        Class to attach a residual network trunk to a data layer
+    '''
+
+    def __init__(self, params):
+        self.phase = params['phase']
+        self.main_branch = params['main_branch']
+        self.num_output_stage1 = params['num_output_stage1']
+        self.blocks = params['blocks']
+        self._required = ['phase', 'main_branch',
+                          'num_output_stage1', 'blocks']
+
+    def attach(self, netspec, bottom):
+        from lego.hybrid import ConvBNReLULego, ShortcutLego
+
+        if self.phase == 'train':
+            use_global_stats = False
+        else:
+            use_global_stats = True
+
+        params = dict(name='1', num_output=64, kernel_size=7,
+                      use_global_stats=use_global_stats, pad=3, stride=2)
+        stage1 = ConvBNReLULego(params).attach(netspec, bottom)
+
+        params = dict(kernel_size=3, stride=2, pool=P.Pooling.MAX,
+                      name='pool1')
+        pool1 = BaseLegoFunction('Pooling', params).attach(netspec, [stage1])
+
+        num_output = self.num_output_stage1
+
+        last = pool1
+        for stage in range(4):
+            name = str(stage + 1)
+
+            for block in range(self.blocks[stage]):
+                if block == 0:
+                    shortcut = 'projection'
+                    if stage > 0:
+                        stride = 2
+                    else:
+                        stride = 1
+                else:
+                    shortcut = 'identity'
+                    stride = 1
+
+                # this is for resnet 18 / 34, where the first block of stage
+                # 0 does not need projection shortcut
+                if block == 0 and stage == 0 and self.main_branch == 'normal':
+                    shortcut = 'identity'
+
+                # This is for not downsampling while creating detection
+                # network
+                # if block == 0 and stage == 1:
+                #    stride = 1
+
+                name = 'stage' + str(stage) + '_block' + str(block)
+                curr_num_output = num_output * (2 ** (stage))
+
+                params = dict(name=name, num_output=curr_num_output,
+                              shortcut=shortcut, main_branch=self.main_branch,
+                              stride=stride, use_global_stats=use_global_stats)
+                last = ShortcutLego(params).attach(netspec, [last])
+        return last
