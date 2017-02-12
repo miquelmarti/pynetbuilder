@@ -1,7 +1,9 @@
 """
 Copyright 2016 Yahoo Inc.
-Licensed under the terms of the 2 clause BSD license. 
+Licensed under the terms of the 2 clause BSD license.
 Please see LICENSE file in the project root for terms.
+
+Modified by Miquel Marti miquelmr@kth.se
 """
 
 from base import BaseLego
@@ -46,3 +48,33 @@ class ImageDataLego(BaseLego):
         netspec['label'] = label_lego
         return data_lego, label_lego
 
+
+class VOCSegDataLego(BaseLego):
+    '''
+    Lego for using the python data layers for PascalVOC from
+    https://github.com/shelhamer/fcn.berkeleyvision.org
+    which needs to be in the python path
+    '''
+
+    def __init__(self, params):
+        self._required = ['phase', 'split', 'data_dir']
+        self._check_required_params(params)
+        self.pydata_params = dict(split=params['split'],
+                                  mean=(104.00699, 116.66877, 122.67892),
+                                  seed=1337)
+        if params['phase'] == 'train':
+            self.phase = dict(phase=caffe.TRAIN)
+            self.pydata_params['sbdd_dir'] = params['data_dir']
+            self.pylayer = 'SBDDSegDataLayer'
+        elif params['phase'] == 'test':
+            self.phase = dict(phase=caffe.TEST)
+            self.pydata_params['voc_dir'] = params['data_dir']
+            self.pylayer = 'VOCSegDataLayer'
+
+    def attach(self, netspec):
+        data, label = L.Python(module='voc_layers', layer=self.pylayer,
+                               ntop=2, param_str=str(self.pydata_params),
+                               include=self.phase)
+        netspec['data'] = data
+        netspec['label'] = label
+        return data, label
