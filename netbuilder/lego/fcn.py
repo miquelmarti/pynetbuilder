@@ -11,9 +11,6 @@ from base import BaseLego
 from base import BaseLegoFunction
 from base import Config
 
-from caffe.proto import caffe_pb2
-import google.protobuf as pb
-from caffe import layers as L
 from caffe import params as P
 import caffe
 from copy import deepcopy
@@ -46,24 +43,30 @@ class FCNAssembleLego(BaseLego):
         self.num_classes = params['num_classes']
 
     def attach(self, netspec, bottom):
-        # TODO: Attach the legos
-
+        # Change default params
+        Config.set_default_params('Convolution', 'bias_term',
+                                  True)
         score_params = dict(name='score_top', bias_filler=dict(type='constant',
-                            value=1), bias_term=True, kernel_size=1, pad=0,
-                            num_output=self.num_classes)
+                            value=1), kernel_size=1, pad=0,
+                            num_output=self.num_classes,
+                            param=[dict(lr_mult=1, decay_mult=1),
+                                   dict(lr_mult=2, decay_mult=0)])
         score_top = BaseLegoFunction('Convolution',
                                      score_params).attach(netspec, bottom)
 
         upscore_params = dict(name='upscore2', convolution_param=dict(
                                num_output=self.num_classes, kernel_size=4,
                                stride=2, bias_term=False,
+                               group=self.num_classes,
                                weight_filler=dict(type='bilinear')))
         upscore2 = BaseLegoFunction('Deconvolution', upscore_params
                                     ).attach(netspec, [score_top])
 
         score_params = dict(name='score_skip', kernel_size=1, pad=0,
                             num_output=self.num_classes, bias_term=True,
-                            bias_filler=dict(type='constant', value=1))
+                            bias_filler=dict(type='constant', value=1),
+                            param=[dict(lr_mult=1, decay_mult=1),
+                                   dict(lr_mult=2, decay_mult=0)])
         score_skip = BaseLegoFunction(
             'Convolution', score_params).attach(
             netspec, [netspec[self.skip_source_layer[0]]])
@@ -80,6 +83,7 @@ class FCNAssembleLego(BaseLego):
         upscore_params = dict(name='upscore16', convolution_param=dict(
                                num_output=self.num_classes, kernel_size=32,
                                stride=16, bias_term=False,
+                               group=self.num_classes,
                                weight_filler=dict(type='bilinear')))
         upscore16 = BaseLegoFunction('Deconvolution', upscore_params
                                      ).attach(netspec, [fuse_skip])
@@ -95,3 +99,9 @@ class FCNAssembleLego(BaseLego):
                                                        ignore_label=255))
         loss = BaseLegoFunction('SoftmaxWithLoss', loss_param).attach(
             netspec, [scores, netspec['label']])
+
+        # Reset default params
+        Config.set_default_params('Convolution', 'bias_term',
+                                  False)
+
+        return loss

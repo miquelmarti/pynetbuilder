@@ -1,6 +1,6 @@
 """
 Copyright 2016 Yahoo Inc.
-Licensed under the terms of the 2 clause BSD license. 
+Licensed under the terms of the 2 clause BSD license.
 Please see LICENSE file in the project root for terms.
 """
 
@@ -14,6 +14,8 @@ from caffe import params as P
 import caffe
 from copy import deepcopy
 
+import re
+
 class ConvBNReLULego(BaseLego):
     type = 'ConvBNReLU'
     def __init__(self, params):
@@ -22,11 +24,17 @@ class ConvBNReLULego(BaseLego):
         self._check_required_params(params)
         self.convParams = deepcopy(params)
         del self.convParams['use_global_stats']
-        self.convParams['name'] = 'conv_' + params['name']
+        self.convParams['name'] = params['name']
+
+        if 'res' in params['name']:
+            name = re.sub('res', '', params['name'])
+        else:
+            name = '_' + params['name']
+
         self.batchNormParams = dict(use_global_stats=params['use_global_stats'],
-                  name='bn_' + params['name'])
-        self.scaleParams = dict(name='scale_' + params['name'])
-        self.reluParams = dict(name='relu_' + params['name'])
+                        name='bn' + name)
+        self.scaleParams = dict(name='scale' + name)
+        self.reluParams = dict(name=params['name'] + '_relu')
 
     def attach(self, netspec, bottom):
         conv = BaseLegoFunction('Convolution', self.convParams).attach(netspec, bottom)
@@ -57,10 +65,10 @@ class ConvBNLego(BaseLego):
         self._check_required_params(params)
         self.convParams = deepcopy(params)
         del self.convParams['use_global_stats']
-        self.convParams['name'] = 'conv_' + params['name']
+        self.convParams['name'] = params['name']
         self.batchNormParams = dict(use_global_stats=params['use_global_stats'],
-                  name='bn_' + params['name'])
-        self.scaleParams = dict(name='scale_' + params['name'])
+                  name='bn' + re.sub('res', '', params['name']))
+        self.scaleParams = dict(name='scale' + re.sub('res', '', params['name']))
 
 
     def attach(self, netspec, bottom):
@@ -74,8 +82,8 @@ class EltwiseReLULego(BaseLego):
     def __init__(self, params):
         self._required = ["name"]
         self._check_required_params(params)
-        self.eltwiseParams = dict(name='eltwise_' + params['name'])
-        self.reluParams = dict(name='relu_' + params['name'])
+        self.eltwiseParams = dict(name=params['name'])
+        self.reluParams = dict(name=params['name'] + '_relu')
 
     def attach(self, netspec, bottom):
         eltwise = BaseLegoFunction('Eltwise', self.eltwiseParams).attach(netspec, bottom)
@@ -275,7 +283,7 @@ class ShortcutLego(BaseLego):
         if self.shortcut == 'identity':
             shortcut = bottom[0]
         elif self.shortcut == 'projection':
-            name = self.name + '_proj_shortcut'
+            name = self.name + '_branch1'
             num_output = self.num_output
             shortcut_params = dict(name=name , num_output=num_output,
                                  kernel_size=1, pad=0, stride=self.stride,
@@ -414,4 +422,3 @@ class ShortcutLego(BaseLego):
         eltwiseRelu = EltwiseReLULego(eltrelu_params).attach(netspec, [shortcut, br2_out])
 
         return eltwiseRelu
-

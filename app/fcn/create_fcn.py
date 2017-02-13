@@ -90,7 +90,7 @@ if __name__ == '__main__':
     else:
         res_params['phase'] = 'test'
         res_params['data_dir'] = args.data_dir_test
-        res_params['split'] = args.splits[1],
+        res_params['split'] = args.splits[1]
         netspec = get_resnet_fcn(res_params)
 
     fp = open(args.output_folder + '/test.prototxt', 'w')

@@ -1,11 +1,15 @@
 """
 @author Miquel Marti miquelmr@kth.se
+
+This model contains base networks to be attached after a data layer.
+Normally used with some other legos following to define the task,
+otherwise isjust a feature extractor.
 """
 
 from caffe import params as P
 import caffe
 
-from lego.base import BaseLegoFunction, BaseLego
+from lego.base import BaseLegoFunction, BaseLego, Config
 
 
 class ResNetLego(BaseLego):
@@ -24,20 +28,22 @@ class ResNetLego(BaseLego):
     def attach(self, netspec, bottom):
         from lego.hybrid import ConvBNReLULego, ShortcutLego
 
-        if self.phase == 'train':
-            use_global_stats = False
-        else:
-            use_global_stats = True
+        use_global_stats = True
 
-        params = dict(name='1', num_output=64, kernel_size=7,
+        # Change default param for first conv layer
+        Config.set_default_params('Convolution', 'bias_term', True)
+        params = dict(name='conv1', num_output=64, kernel_size=7,
                       use_global_stats=use_global_stats, pad=3, stride=2)
         stage1 = ConvBNReLULego(params).attach(netspec, bottom)
 
+        # Restore default param
+        Config.set_default_params('Convolution', 'bias_term', False)
         params = dict(kernel_size=3, stride=2, pool=P.Pooling.MAX,
                       name='pool1')
         pool1 = BaseLegoFunction('Pooling', params).attach(netspec, [stage1])
 
         num_output = self.num_output_stage1
+        abc = 'abcdefg'
 
         last = pool1
         for stage in range(4):
@@ -64,7 +70,7 @@ class ResNetLego(BaseLego):
                 # if block == 0 and stage == 1:
                 #    stride = 1
 
-                name = 'stage' + str(stage) + '_block' + str(block)
+                name = 'res' + str(stage + 2) + abc[block]
                 curr_num_output = num_output * (2 ** (stage))
 
                 params = dict(name=name, num_output=curr_num_output,

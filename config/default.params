@@ -2,12 +2,11 @@
 # which will be used by the BaseLegoFunction
 # The config format is:
 # Key: Name of the core layer
-# Value: Python dict, with the default caffe parqameters
+# Value: Python dict, with the default caffe parameters
 
 Convolution = dict(
 				weight_filler=dict(type='msra'),
-				bias_filler=dict(type='constant',value=0),
-				param=[dict(lr_mult=1, decay_mult=1), dict(lr_mult=2, decay_mult=0)]
+				bias_term=False
 				)
 
 Deconvolution = dict(
