@@ -2,18 +2,13 @@
 @author Miquel Marti miquelmr@kth.se
 """
 
-from caffe.proto import caffe_pb2
-import google.protobuf as pb
-from caffe import layers as L
-from caffe import params as P
-import caffe
 import sys
 from argparse import ArgumentParser
-
 import os
-DATASETS_DIR = os.environ['DATASETS']
 
+DATASETS_DIR = os.environ['DATASETS']
 sys.path.append('netbuilder')
+
 from tools.complexity import get_complexity
 from nets.fcn import get_vgg_fcn, get_resnet_fcn
 

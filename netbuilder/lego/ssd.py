@@ -1,7 +1,9 @@
 """
 Copyright 2016 Yahoo Inc.
-Licensed under the terms of the 2 clause BSD license. 
+Licensed under the terms of the 2 clause BSD license.
 Please see LICENSE file in the project root for terms.
+
+Modified by Miquel Marti miquelmr@kth.se
 """
 
 from base import BaseLego
@@ -15,8 +17,8 @@ import caffe
 from copy import deepcopy
 
 '''
-    This module contains all the hybrid legos needed for 
-    generating networks for object detection using 
+    This module contains all the hybrid legos needed for
+    generating networks for object detection using
     SSD (Single shot multibox detector: https://github.com/weiliu89/caffe/tree/ssd
     The code is inspired/refactored from the above repository
 '''
@@ -92,15 +94,15 @@ class DeepPredictionLego(BaseLego):
 
 
 '''
-    Structure for attaching multibox prediction unit to a layers in a 
+    Structure for attaching multibox prediction unit to a layers in a
     network.
     A mbox unit contains:
     1. Location prediction layers
     2. Confidence prediction layers
     3. Prior box layers
-    
-    This corresponds to CreateMultiBoxHead function here: 
-    https://github.com/weiliu89/caffe/blob/ssd/python/caffe/model_libs.py#L581 
+
+    This corresponds to CreateMultiBoxHead function here:
+    https://github.com/weiliu89/caffe/blob/ssd/python/caffe/model_libs.py#L581
 '''
 class MBoxUnitLego(BaseLego):
     def __init__(self, params):
@@ -179,7 +181,7 @@ class MBoxUnitLego(BaseLego):
 
 '''
     This lego does the following:
-    1. Takes a list of layers 
+    1. Takes a list of layers
     2. Attaches mbox units
     3. Joins them together and attaches MBox Loss
 '''
@@ -198,9 +200,9 @@ class MBoxAssembleLego(BaseLego):
         aspect_ratios = self.params['aspect_ratios']
         min_sizes = self.params['min_sizes']
         max_sizes = self.params['max_sizes']
-        is_train = self.params['is_train']
+        phase = self.params['phase']
 
-        use_global_stats = False  if is_train else True
+        use_global_stats = False if phase == 'train' else True
 
         loc = []
         conf = []
@@ -288,7 +290,7 @@ class MBoxAssembleLego(BaseLego):
             propagate_down=[True, True, False, False])).attach(netspec, mbox_layers)
 
 
-        if not is_train:
+        if phase == 'test':
             # parameters for generating detection output.
             det_out_param = {
                 'num_classes': num_classes,
@@ -334,3 +336,81 @@ class MBoxAssembleLego(BaseLego):
                 include=dict(phase=caffe_pb2.Phase.Value('TEST')))
 
 
+class SSDExtraLayersLego(BaseLego):
+    def __init__(self, params):
+        self._required = ['base_network']
+        self._check_required_params(params)
+        self.base_network = params['base_network']
+        if self.base_network == "Resnet":
+            self._required.extend(['extra_blocks', 'extra_num_outputs',
+                                   'main_branch', 'use_global_stats'])
+            self._check_required_params(params)
+            self.extra_blocks = params['extra_blocks']
+            self.extra_num_outputs = params['extra_num_outputs']
+            self.main_branch = params['main_branch']
+            self.use_global_stats = params['use_global_stats']
+
+    def attach(self, netspec, bottom):
+        from hybrid import ShortcutLego
+        from base import BaseLegoFunction
+
+        if self.base_network == "VGGnet":
+            for i in xrange(6, 9):
+                name = 'conv' + str(i) + '_1'
+                num_output = 256 if i == 6 else 128
+                params = dict(name=name, kernel_size=1, num_output=num_output,
+                              pad=0, stride=1)  # use_global_stats=True)
+                conv1 = BaseLegoFunction('Convolution', params).attach(
+                    netspec, [bottom])
+                relu1 = BaseLegoFunction(
+                    'ReLU', dict(name=name + '_relu')).attach(netspec, [conv1])
+
+                name = 'conv' + str(i) + '_2'
+                num_output = 512 if i == 6 else 2  # use_global_stats=True)56
+                params = dict(name=name, kernel_size=3, num_output=num_output,
+                              pad=1, stride=2)  # use_global_stats=True)
+                conv2 = BaseLegoFunction('Convolution', params).attach(
+                    netspec, [relu1])
+                last = BaseLegoFunction(
+                    'ReLU', dict(name=name + '_relu')).attach(netspec, [conv2])
+            # Add global pooling layer.
+            pool_param = dict(name='pool6', pool=P.Pooling.AVE,
+                              global_pooling=True)
+            pool = BaseLegoFunction('Pooling', pool_param).attach(
+                netspec, [last])
+
+        elif self.base_network == "Resnet":
+            # Pooling stage
+            pool_params = dict(kernel_size=7, stride=1, pool=P.Pooling.AVE, name='pool', pad=3)
+            pool = BaseLegoFunction('Pooling', pool_params).attach(netspec, [last])
+
+            abc = 'abcdefghijklmnopqrstuvwxyz'
+            for stage in range(len(self.extra_blocks)):
+                for block in range(self.extra_blocks[stage]):
+                    if block == 0:
+                        shortcut = 'projection'
+                        stride = 2
+                    else:
+                        shortcut = 'identity'
+                        stride = 1
+
+                    name = 'res' + str(stage + 6) + abc[block]
+                    curr_num_output = self.extra_num_outputs[stage]
+
+                    params = dict(name=name, num_output=curr_num_output,
+                                  shortcut=shortcut,
+                                  main_branch=self.main_branch,
+                                  stride=stride, filter_mult=None,
+                                  use_global_stats=self.use_global_stats)
+                    last = ShortcutLego(params).attach(netspec, [last])
+
+            # Add global pooling layer.
+            pool_param = dict(name='pool_last', pool=P.Pooling.AVE,
+                              global_pooling=True)
+            pool = BaseLegoFunction('Pooling', pool_param).attach(
+                netspec, [last])
+        else:
+            raise Exception('Base network unknown.',
+                            'Currently supported VGGnet and Resnet')
+
+        return pool

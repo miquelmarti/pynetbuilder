@@ -43,11 +43,10 @@ class ResNetLego(BaseLego):
         pool1 = BaseLegoFunction('Pooling', params).attach(netspec, [stage1])
 
         num_output = self.num_output_stage1
-        abc = 'abcdefg'
+        abc = 'abcdefghijklmnopqrstuvwxyz'
 
         last = pool1
         for stage in range(4):
-            name = str(stage + 1)
 
             for block in range(self.blocks[stage]):
                 if block == 0:
