@@ -74,10 +74,10 @@ if __name__ == '__main__':
         res_params['split'] = args.splits[0]
         netspec = get_resnet_ssdnet(res_params)
 
-    from tools.complexity import get_complexity
-    params, flops = get_complexity(netspec=netspec)
-    print 'Number of params: ', (1.0 * params) / 1000000.0, ' Million'
-    print 'Number of flops: ', (1.0 * flops) / 1000000.0, ' Million'
+    # from tools.complexity import get_complexity
+    # params, flops = get_complexity(netspec=netspec)
+    # print 'Number of params: ', (1.0 * params) / 1000000.0, ' Million'
+    # print 'Number of flops: ', (1.0 * flops) / 1000000.0, ' Million'
 
     fp = open(args.output_folder + '/train.prototxt', 'w')
     print >> fp, netspec.to_proto()

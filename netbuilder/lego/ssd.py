@@ -342,6 +342,7 @@ class SSDExtraLayersLego(BaseLego):
         self._check_required_params(params)
         self.base_network = params['base_network']
         if self.base_network == "Resnet":
+            print params
             self._required.extend(['extra_blocks', 'extra_num_outputs',
                                    'main_branch', 'use_global_stats'])
             self._check_required_params(params)
@@ -354,6 +355,8 @@ class SSDExtraLayersLego(BaseLego):
         from hybrid import ShortcutLego
         from base import BaseLegoFunction
 
+        last = bottom
+
         if self.base_network == "VGGnet":
             for i in xrange(6, 9):
                 name = 'conv' + str(i) + '_1'
@@ -361,7 +364,7 @@ class SSDExtraLayersLego(BaseLego):
                 params = dict(name=name, kernel_size=1, num_output=num_output,
                               pad=0, stride=1)  # use_global_stats=True)
                 conv1 = BaseLegoFunction('Convolution', params).attach(
-                    netspec, [bottom])
+                    netspec, last)
                 relu1 = BaseLegoFunction(
                     'ReLU', dict(name=name + '_relu')).attach(netspec, [conv1])
 
@@ -373,16 +376,15 @@ class SSDExtraLayersLego(BaseLego):
                     netspec, [relu1])
                 last = BaseLegoFunction(
                     'ReLU', dict(name=name + '_relu')).attach(netspec, [conv2])
+                last = [last]
+
             # Add global pooling layer.
             pool_param = dict(name='pool6', pool=P.Pooling.AVE,
                               global_pooling=True)
             pool = BaseLegoFunction('Pooling', pool_param).attach(
-                netspec, [last])
+                netspec, last)
 
         elif self.base_network == "Resnet":
-            # Pooling stage
-            pool_params = dict(kernel_size=7, stride=1, pool=P.Pooling.AVE, name='pool', pad=3)
-            pool = BaseLegoFunction('Pooling', pool_params).attach(netspec, [last])
 
             abc = 'abcdefghijklmnopqrstuvwxyz'
             for stage in range(len(self.extra_blocks)):
@@ -402,13 +404,14 @@ class SSDExtraLayersLego(BaseLego):
                                   main_branch=self.main_branch,
                                   stride=stride, filter_mult=None,
                                   use_global_stats=self.use_global_stats)
-                    last = ShortcutLego(params).attach(netspec, [last])
+                    last = ShortcutLego(params).attach(netspec, last)
+                    last = [last]
 
             # Add global pooling layer.
             pool_param = dict(name='pool_last', pool=P.Pooling.AVE,
                               global_pooling=True)
             pool = BaseLegoFunction('Pooling', pool_param).attach(
-                netspec, [last])
+                netspec, last)
         else:
             raise Exception('Base network unknown.',
                             'Currently supported VGGnet and Resnet')

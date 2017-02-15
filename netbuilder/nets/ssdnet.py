@@ -69,6 +69,8 @@ def get_resnet_ssdnet(params):
     num_output_stage1 = params['num_output_stage1']
     blocks = params['blocks']
     extra_layer_attach = params['extra_layer_attach']
+    extra_blocks = params['extra_blocks']
+    extra_num_outputs = params['extra_num_outputs']
 
     netspec = caffe.NetSpec()
 
@@ -84,7 +86,12 @@ def get_resnet_ssdnet(params):
                          blocks=blocks)
     res_last = ResNetLego(resnet_params).attach(netspec, [data])
 
-    extrassd_params = dict(base_network='VGGnet')
+    # use_global_stats = False if phase = 'train' else True
+    use_global_stats = True
+    extrassd_params = dict(base_network='Resnet', main_branch=main_branch,
+                           extra_blocks=extra_blocks,
+                           extra_num_outputs=extra_num_outputs,
+                           use_global_stats=True)
     extra_last = SSDExtraLayersLego(extrassd_params).attach(
         netspec, [netspec[extra_layer_attach]])
 
