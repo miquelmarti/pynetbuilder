@@ -78,3 +78,196 @@ class VOCSegDataLego(BaseLego):
         netspec['data'] = data
         netspec['label'] = label
         return data, label
+
+
+class VOCDetDataLego(BaseLego):
+    '''
+    Lego for using the AnnotatedData layer with the LMDB for PascalVOC
+    with detection labels created with the scripts from:
+    https://github.com/weiliu89/caffe/tree/ssd
+    '''
+
+    _train_transform_param = {
+            'mirror': True,
+            'mean_value': [104, 117, 123],
+            'resize_param': {
+                    'prob': 1,
+                    'resize_mode': P.Resize.WARP,
+                    'height': 300,
+                    'width': 300,
+                    'interp_mode': [
+                            P.Resize.LINEAR,
+                            P.Resize.AREA,
+                            P.Resize.NEAREST,
+                            P.Resize.CUBIC,
+                            P.Resize.LANCZOS4,
+                            ],
+                    },
+            'distort_param': {
+                    'brightness_prob': 0.5,
+                    'brightness_delta': 32,
+                    'contrast_prob': 0.5,
+                    'contrast_lower': 0.5,
+                    'contrast_upper': 1.5,
+                    'hue_prob': 0.5,
+                    'hue_delta': 18,
+                    'saturation_prob': 0.5,
+                    'saturation_lower': 0.5,
+                    'saturation_upper': 1.5,
+                    'random_order_prob': 0.0,
+                    },
+            'expand_param': {
+                    'prob': 0.5,
+                    'max_expand_ratio': 4.0,
+                    },
+            'emit_constraint': {
+                'emit_type': caffe_pb2.EmitConstraint.CENTER,
+                }
+            }
+    _test_transform_param = {
+            'mean_value': [104, 117, 123],
+            'resize_param': {
+                    'prob': 1,
+                    'resize_mode': P.Resize.WARP,
+                    'height': 300,
+                    'width': 300,
+                    'interp_mode': [P.Resize.LINEAR],
+                    },
+            }
+    _batch_sampler = [
+            {
+                    'sampler': {
+                            },
+                    'max_trials': 1,
+                    'max_sample': 1,
+            },
+            {
+                    'sampler': {
+                            'min_scale': 0.3,
+                            'max_scale': 1.0,
+                            'min_aspect_ratio': 0.5,
+                            'max_aspect_ratio': 2.0,
+                            },
+                    'sample_constraint': {
+                            'min_jaccard_overlap': 0.1,
+                            },
+                    'max_trials': 50,
+                    'max_sample': 1,
+            },
+            {
+                    'sampler': {
+                            'min_scale': 0.3,
+                            'max_scale': 1.0,
+                            'min_aspect_ratio': 0.5,
+                            'max_aspect_ratio': 2.0,
+                            },
+                    'sample_constraint': {
+                            'min_jaccard_overlap': 0.3,
+                            },
+                    'max_trials': 50,
+                    'max_sample': 1,
+            },
+            {
+                    'sampler': {
+                            'min_scale': 0.3,
+                            'max_scale': 1.0,
+                            'min_aspect_ratio': 0.5,
+                            'max_aspect_ratio': 2.0,
+                            },
+                    'sample_constraint': {
+                            'min_jaccard_overlap': 0.5,
+                            },
+                    'max_trials': 50,
+                    'max_sample': 1,
+            },
+            {
+                    'sampler': {
+                            'min_scale': 0.3,
+                            'max_scale': 1.0,
+                            'min_aspect_ratio': 0.5,
+                            'max_aspect_ratio': 2.0,
+                            },
+                    'sample_constraint': {
+                            'min_jaccard_overlap': 0.7,
+                            },
+                    'max_trials': 50,
+                    'max_sample': 1,
+            },
+            {
+                    'sampler': {
+                            'min_scale': 0.3,
+                            'max_scale': 1.0,
+                            'min_aspect_ratio': 0.5,
+                            'max_aspect_ratio': 2.0,
+                            },
+                    'sample_constraint': {
+                            'min_jaccard_overlap': 0.9,
+                            },
+                    'max_trials': 50,
+                    'max_sample': 1,
+            },
+            {
+                    'sampler': {
+                            'min_scale': 0.3,
+                            'max_scale': 1.0,
+                            'min_aspect_ratio': 0.5,
+                            'max_aspect_ratio': 2.0,
+                            },
+                    'sample_constraint': {
+                            'max_jaccard_overlap': 1.0,
+                            },
+                    'max_trials': 50,
+                    'max_sample': 1,
+            },
+            ]
+
+    def __init__(self, params):
+        self._required = ['phase', 'label_map_file', 'data_param', 'anno_type']
+                        #   'batch_sampler_config', 'transform_param_config']
+        self._check_required_params(params)
+        if params['phase'] == 'train':
+            self.include = dict(phase=caffe.TRAIN)
+            self.ntop = 2
+            self.transform_param = self._train_transform_param
+
+        elif params['phase'] == 'test':
+            self.include = dict(phase=caffe.TEST)
+            self.ntop = 2
+            self.transform_param = self._test_transform_param
+
+        elif params['phase'] == 'deploy':
+            raise Exception("Deploy phase not implemented")
+            self.include = dict(phase=caffe.TEST)
+            self.ntop = 1
+            self.transform_param = self._test_transform_param
+
+        self.annotated_data_param = dict(
+            batch_sampler=self._batch_sampler,
+            label_map_file=params['label_map_file']
+            )
+        self.data_param = params['data_param']
+
+        if params['anno_type'] is not None:
+            self.annotated_data_param.update(anno_type=params['anno_type'])
+
+    def attach(self, netspec):
+        if self.ntop == 2:
+            data, label = L.AnnotatedData(
+                name="data", annotated_data_param=self.annotated_data_param,
+                data_param=self.data_param, ntop=self.ntop,
+                transform_param=self.transform_param,
+                include=self.include
+                )
+            netspec['data'] = data
+            netspec['label'] = label
+            return data, label
+
+        else:
+            data = L.AnnotatedData(
+                name="data", annotated_data_param=self.annotated_data_param,
+                data_param=self.data_param, ntop=self.ntop,
+                transform_param=self.transform_param,
+                include=self.include
+                )
+            netspec['data'] = data
+            return data

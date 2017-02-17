@@ -187,12 +187,14 @@ class MBoxUnitLego(BaseLego):
 '''
 class MBoxAssembleLego(BaseLego):
     def __init__(self, params):
-        self._required = ['mbox_source_layers', 'num_classes', 'normalizations', 'aspect_ratios', 'min_sizes', 'max_sizes']
+        self._required = ['mbox_source_layers', 'num_classes',
+                          'normalizations', 'aspect_ratios', 'min_sizes',
+                          'max_sizes', 'label_map_file', 'name_size_file',
+                          'output_directory']
         self.params = params
 
-
     def attach(self, netspec, bottom):
-
+        # TODO: Take all default params to config file
         label = bottom[0]
         mbox_source_layers = self.params['mbox_source_layers']
         num_classes = self.params['num_classes']
@@ -201,6 +203,12 @@ class MBoxAssembleLego(BaseLego):
         min_sizes = self.params['min_sizes']
         max_sizes = self.params['max_sizes']
         phase = self.params['phase']
+        label_map_file = self.params['label_map_file']
+        name_size_file = self.params['name_size_file']
+        output_directory = self.params['output_directory']
+
+        with open(name_size_file, 'r') as f:
+            num_test_image = len(f.readlines())
 
         use_global_stats = False if phase == 'train' else True
 
@@ -211,9 +219,12 @@ class MBoxAssembleLego(BaseLego):
         for i, layer in enumerate(mbox_source_layers):
             if normalizations[i] != -1:
                 norm_name = "{}_norm".format(layer)
-                norm_layer = BaseLegoFunction('Normalize',
-                                              dict(name=norm_name, scale_filler=dict(type="constant", value=normalizations[i]),
-                    across_spatial=False, channel_shared=False)).attach(netspec, [netspec[layer]])
+                norm_layer = BaseLegoFunction(
+                    'Normalize', dict(
+                        name=norm_name, scale_filler=dict(
+                            type="constant", value=normalizations[i]),
+                        across_spatial=False, channel_shared=False)
+                ).attach(netspec, [netspec[layer]])
                 layer_name = norm_name
             else:
                 layer_name = layer
@@ -262,6 +273,7 @@ class MBoxAssembleLego(BaseLego):
         code_type = P.PriorBox.CENTER_SIZE
         neg_pos_ratio = 3.
         loc_weight = (neg_pos_ratio + 1.) / 4.
+        mining_type = P.MultiBoxLoss.MAX_NEGATIVE
         multibox_loss_param = {
             'loc_loss_type': P.MultiBoxLoss.SMOOTH_L1,
             'conf_loss_type': P.MultiBoxLoss.SOFTMAX,
@@ -273,7 +285,7 @@ class MBoxAssembleLego(BaseLego):
             'use_prior_for_matching': True,
             'background_label_id': background_label_id,
             'use_difficult_gt': train_on_diff_gt,
-            'do_neg_mining': True,
+            'mining_type': mining_type,
             'neg_pos_ratio': neg_pos_ratio,
             'neg_overlap': 0.5,
             'code_type': code_type,
@@ -298,12 +310,12 @@ class MBoxAssembleLego(BaseLego):
                 'background_label_id': 0,
                 'nms_param': {'nms_threshold': 0.45, 'top_k': 400},
                 'save_output_param': {
-                    'output_directory': "./models/voc2007/resnet_36_with4k_inception_trick/expt1/detection/",
-                    'output_name_prefix': "comp4_det_test_",
+                    'output_directory': output_directory,
+                    'output_name_prefix': "det_test_",
                     'output_format': "VOC",
-                    'label_map_file': "data/VOC0712/labelmap_voc.prototxt",
-                    'name_size_file': "data/VOC0712/test_name_size.txt",
-                    'num_test_image': 4952,
+                    'label_map_file': label_map_file,
+                    'name_size_file': name_size_file,
+                    'num_test_image': num_test_image,
                     },
                 'keep_top_k': 200,
                 'confidence_threshold': 0.01,
@@ -316,7 +328,7 @@ class MBoxAssembleLego(BaseLego):
                 'background_label_id': 0,
                 'overlap_threshold': 0.5,
                 'evaluate_difficult_gt': False,
-                'name_size_file': "data/VOC0712/test_name_size.txt",
+                'name_size_file': name_size_file,
                 }
 
             conf_name = "mbox_conf"
@@ -342,7 +354,6 @@ class SSDExtraLayersLego(BaseLego):
         self._check_required_params(params)
         self.base_network = params['base_network']
         if self.base_network == "Resnet":
-            print params
             self._required.extend(['extra_blocks', 'extra_num_outputs',
                                    'main_branch', 'use_global_stats'])
             self._check_required_params(params)

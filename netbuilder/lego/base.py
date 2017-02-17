@@ -1,6 +1,6 @@
 """
 Copyright 2016 Yahoo Inc.
-Licensed under the terms of the 2 clause BSD license. 
+Licensed under the terms of the 2 clause BSD license.
 Please see LICENSE file in the project root for terms.
 """
 
@@ -10,7 +10,7 @@ Please see LICENSE file in the project root for terms.
     Additional features include:
     1. Picking up default params from a config file
     2. Checking required params are passed
-    3. Attach function - Every new lego should implement its 
+    3. Attach function - Every new lego should implement its
     own attach function
 """
 class BaseLego(object):
@@ -92,7 +92,7 @@ class BaseLegoFunction(BaseLego):
     A Functional wrapper on top of netspec Function class
     This is used to attach all the basic layers in caffe
     to a netspec object.
-    
+
     """
     def __init__(self, type_name, params):
         if '_required' not in self.__dict__:
@@ -139,4 +139,3 @@ class Config(object):
         assert layer in Config._default_params
         assert param in Config._default_params[layer]
         Config._default_params[layer][param] = val
-

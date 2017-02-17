@@ -10,42 +10,79 @@ import sys
 from argparse import ArgumentParser
 import os
 
+from caffe import params as P
+from caffe.proto import caffe_pb2
+
 DATASETS_DIR = os.environ['DATASETS']
 sys.path.append('netbuilder')
 
 from tools.complexity import get_complexity
 from nets.ssdnet import get_vgg_ssdnet, get_resnet_ssdnet
 
-parser = ArgumentParser(description=""" This script generates ssd
-    vggnet train_val.prototxt files""")
+parser = ArgumentParser(description="""
+    This script generates SSD networks for Object detection
+    based on VGGnet or Resnets. Writes to the selected folder the train and
+    test prototxt files with a data layer that must be changed to accept
+    the desired input.
+    """)
 parser.add_argument('-t', '--type', help="""Resnet or VGGnet""")
 parser.add_argument('-o', '--output_folder', help="""Train and Test prototxt
     will be generated as train.prototxt and test.prototxt""")
+
+# Data params
+# TODO: Load arguments from config file instead
 parser.add_argument('-dl', '--data_layer', help="""Data layer to use""",
                     default="pascal")
 parser.add_argument('-d', '--data_dir_train',
                     help="""Directory containing training data""",
-                    default=os.path.join(DATASETS_DIR, 'sbdd/dataset'))
+                    default=os.path.join(
+                        DATASETS_DIR,
+                        'VOCdevkit/VOC0712/lmdb/VOC0712_trainval_lmdb'))
 parser.add_argument('-D', '--data_dir_test',
                     help="""Directory containing test data""",
-                    default=os.path.join(DATASETS_DIR, 'pascal/VOC2011'))
-parser.add_argument('-s', '--splits',
-                    help="""Name of splits for train and test""",
-                    nargs="2", default=['train', 'seg11valid'])
+                    default=os.path.join(
+                        DATASETS_DIR,
+                        'VOCdevkit/VOC0712/lmdb/VOC0712_test_lmdb'))
+parser.add_argument('--label_map_file', help="""Label map file""",
+                    default=os.path.join(
+                        DATASETS_DIR,
+                        'VOCdevkit/VOC0712/labelmap_voc.prototxt'))
+parser.add_argument('--name_size_file', help="""Name size file""",
+                    default=os.path.join(
+                        DATASETS_DIR,
+                        'VOCdevkit/VOC0712/test_name_size.txt'))
+
+# Train/test params
+parser.add_argument('-g', '--gpu_list',
+                    help="""List of gpus to use, CPU if empty""",
+                    nargs="+", default=[0, 1])
+parser.add_argument('-bs', '--batch_size', help="""Total batch size""",
+                    type=int, default=32)
+parser.add_argument('--batch_size_per_device',
+                    help="""Batch size per gpu""",
+                    type=int, default=4)
+parser.add_argument('--test_out_dir', help="""Directory for test results""",
+                    default='~')
+parser.add_argument('--weights', help="""Weights file from which to start
+    the training """, default='')
+
+# Resnet params
 parser.add_argument('-n', '--num_output_stage1', help="""Number of filters in
     stage 1 of resnet""", type=int, default=128)
-parser.add_argument('--mbox_source_layers', nargs='+', help="""Names of layers
-    where detection heads will be attached""")
 parser.add_argument('-b', '--blocks', type=int, nargs='+', help="""Number of
     Blocks in the 4 resnet stages""", default=[3, 4, 6, 3])
+parser.add_argument('-m', '--main_branch', help="""normal, bottleneck""",
+                    required=True)
+
+# SSD params
+parser.add_argument('--mbox_source_layers', nargs='+', help="""Names of layers
+    where detection heads will be attached""")
 parser.add_argument('--extra_blocks', type=int, nargs='+', help="""Number of
     extra Blocks to be attached to Detection network""", default=[3, 3])
 parser.add_argument('--extra_num_outputs', type=int, nargs='+', help="""Number
     of outputs of extra blocks Detection network""", default=[1024, 1024])
 parser.add_argument('--extra_layer_attach', help="""Name of layer where extra
     Blocks will be attached""")
-parser.add_argument('-m', '--main_branch', help="""normal, bottleneck""",
-                    required=True)
 parser.add_argument('-c', '--num_classes', help="""Number of classes in
     detection dataset""", type=int, default=21)
 
@@ -66,31 +103,100 @@ if __name__ == '__main__':
                       num_classes=args.num_classes)
 
     print args.type
+
+    num_gpus = len(args.gpu_list)
+    iter_size = args.batch_size / (args.batch_size_per_device *
+                                   num_gpus)
+    print "Real batch size: ", (iter_size * num_gpus *
+                                args.batch_size_per_device)
+    for g in args.gpu_list:
+        print "Batch size gpu", g, "=", args.batch_size_per_device
+
+    with open(args.name_size_file, 'r') as f:
+        num_test_image = len(f.readlines())
+
+    # TRAIN NET
     if args.type == 'VGG':
         netspec = get_vgg_ssdnet(is_train=True)
+        name = 'VGGNet'
     else:
         res_params['phase'] = 'train'
         res_params['data_dir'] = args.data_dir_train
-        res_params['split'] = args.splits[0]
+        res_params['batch_size_per_device'] = args.batch_size_per_device
+        res_params['label_map_file'] = args.label_map_file
+        res_params['name_size_file'] = args.name_size_file
+        res_params['test_out_dir'] = args.test_out_dir
         netspec = get_resnet_ssdnet(res_params)
+
+        layers_x_block = 2 if args.main_branch == "normal" else 3
+        n_layers = sum(map(lambda x: x*layers_x_block, args.blocks)) + 2
+        name = 'ssdResnet'+str(n_layers)
 
     # from tools.complexity import get_complexity
     # params, flops = get_complexity(netspec=netspec)
     # print 'Number of params: ', (1.0 * params) / 1000000.0, ' Million'
     # print 'Number of flops: ', (1.0 * flops) / 1000000.0, ' Million'
 
-    fp = open(args.output_folder + '/train.prototxt', 'w')
-    print >> fp, netspec.to_proto()
-    fp.close()
+    with open(os.path.join(args.output_folder, 'train.prototxt'), 'w') as fp:
+        print >> fp, 'name: "' + name + '-train"'
+        print >> fp, netspec.to_proto()
 
+    # Create solver
+    solver_params = {}
+    execfile("./config/solver.params", solver_params)
+    solver_params = solver_params['solver_params']
+    solver_params.update(
+        dict(iter_size=iter_size, solver_mode=P.Solver.GPU))
+    solver = caffe_pb2.SolverParameter(
+                train_net=os.path.join(args.output_folder, 'train.prototxt'),
+                test_net=[os.path.join(args.output_folder, 'test.prototxt')],
+                snapshot_prefix=os.path.join(args.output_folder,
+                                             'snapshots/train'),
+                **solver_params)
+    with open(os.path.join(args.output_folder, 'solver.prototxt'), 'w') as fp:
+        print >> fp, solver
+
+    # TEST NET
     if args.type == 'VGG':
         netspec = get_vgg_ssdnet(is_train=False)
     else:
         res_params['phase'] = 'test'
         res_params['data_dir'] = args.data_dir_test
-        res_params['split'] = args.splits[1]
+        res_params['batch_size_per_device'] = 1
+        res_params['label_map_file'] = args.label_map_file
+        res_params['name_size_file'] = args.name_size_file
+        res_params['test_out_dir'] = args.test_out_dir
         netspec = get_resnet_ssdnet(res_params)
 
-    fp = open(args.output_folder + '/test.prototxt', 'w')
-    print >> fp, netspec.to_proto()
-    fp.close()
+    with open(os.path.join(args.output_folder, 'test.prototxt'), 'w') as fp:
+        print >> fp, 'name: "' + name + '-test"'
+        print >> fp, netspec.to_proto()
+
+    # Create solver_score
+    solver_params.update(
+        dict(iter_size=1, solver_mode=P.Solver.CPU, snapshot=0, max_iter=0,
+             test_initialization=True, snapshot_after_train=False,
+             test_iter=[num_test_image]))
+    solver = caffe_pb2.SolverParameter(
+            train_net=os.path.join(args.output_folder, 'train.prototxt'),
+            test_net=[os.path.join(args.output_folder, 'test.prototxt')],
+            snapshot_prefix=os.path.join(args.output_folder,
+                                         'snapshots/train'),
+            **solver_params)
+    with open(os.path.join(args.output_folder,
+              'solver_score.prototxt'), 'w') as fp:
+        print >> fp, solver
+
+    # Create train script
+    with open(os.path.join(args.output_folder, 'train.sh'), 'w') as fp:
+        print >> fp, 'DATE=`date +%Y-%m-%d_%H-%M-%S`'
+        print >> fp, '$CAFFE_ROOT/build/tools/caffe train \\'
+        print >> fp, '--solver="{}" \\'.format(
+            os.path.join(args.output_folder, 'test.prototxt')
+            )
+        if args.weights != '':
+            print >> fp, '--weights="{}" \\'.format(args.weights)
+        print >> fp, '--gpu {} 2>&1  | tee {}'.format(
+            ",".join(str(x) for x in args.gpu_list),
+            os.path.join(args.output_folder, "train_$DATE.log")
+            )

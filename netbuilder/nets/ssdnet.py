@@ -55,7 +55,7 @@ def get_vgg_ssdnet(is_train=True):
 
 
 def get_resnet_ssdnet(params):
-    from lego.data import VOCSegDataLego
+    from lego.data import VOCDetDataLego
     from lego.ssd import MBoxUnitLego, MBoxAssembleLego, SSDExtraLayersLego
     from lego.base import BaseLegoFunction
     from lego.basenet import ResNetLego
@@ -63,8 +63,11 @@ def get_resnet_ssdnet(params):
 
     data_layer = params['data_layer']
     phase = params['phase']
-    split = params['split']
-    data_dir = params['data_dir']
+    batch_size_per_device = params['batch_size_per_device']
+    label_map_file = params['label_map_file']
+    name_size_file = params['name_size_file']
+    source = params['data_dir']
+    output_directory = params['test_out_dir']
     main_branch = params['main_branch']
     num_output_stage1 = params['num_output_stage1']
     blocks = params['blocks']
@@ -72,12 +75,22 @@ def get_resnet_ssdnet(params):
     extra_blocks = params['extra_blocks']
     extra_num_outputs = params['extra_num_outputs']
 
+
+
     netspec = caffe.NetSpec()
 
     # data layer
     if data_layer == 'pascal':
-        data_params = dict(phase=phase, split=split, data_dir=data_dir)
-        data, label = VOCSegDataLego(data_params).attach(netspec)
+        data_params = dict(
+            phase=phase,
+            data_param=dict(batch_size=batch_size_per_device,
+                            backend=P.Data.LMDB,
+                            source=source),
+            label_map_file=label_map_file,
+            anno_type=None
+            )
+        data, label = VOCDetDataLego(data_params).attach(netspec)
+
     else:
         raise Exception('Data layer selected not supported. Available: pascal')
 
@@ -91,7 +104,7 @@ def get_resnet_ssdnet(params):
     extrassd_params = dict(base_network='Resnet', main_branch=main_branch,
                            extra_blocks=extra_blocks,
                            extra_num_outputs=extra_num_outputs,
-                           use_global_stats=True)
+                           use_global_stats=use_global_stats)
     extra_last = SSDExtraLayersLego(extrassd_params).attach(
         netspec, [netspec[extra_layer_attach]])
 
@@ -115,16 +128,19 @@ def get_resnet_ssdnet(params):
     normalizations = [20, 20, 20, -1, -1, -1]
     # normalizations = [-1, -1, -1, -1, -1, -1]
 
-    print min_sizes
-    print max_sizes
-    print aspect_ratios
-    print normalizations
+    # print min_sizes
+    # print max_sizes
+    # print aspect_ratios
+    # print normalizations
     assemble_params = dict(mbox_source_layers=mbox_source_layers,
                            normalizations=normalizations,
                            aspect_ratios=aspect_ratios,
                            num_classes=num_classes,
                            min_sizes=min_sizes,
-                           max_sizes=max_sizes, phase=phase)
+                           max_sizes=max_sizes, phase=phase,
+                           output_directory=output_directory,
+                           label_map_file=label_map_file,
+                           name_size_file=name_size_file)
     MBoxAssembleLego(assemble_params).attach(netspec, [netspec['label']])
 
     return netspec

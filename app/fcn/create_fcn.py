@@ -17,8 +17,8 @@ parser = ArgumentParser(description="""
     This script generates Fully Convolutional Networks for Semantic
     Segmentation based on VGGnet or Resnets with upsampling layers
     and skip connections. Write to the selected folder the train and test
-    prototxt files with a dummy data layer that must be changed to accept
-    the desired input.
+    prototxt files with the selected data layer. Currently only available for
+    PascalVOC but can be changed to accept the desired input.
     """)
 parser.add_argument('-t', '--type', help="""Resnet or VGGnet""")
 parser.add_argument('-o', '--output_folder',
