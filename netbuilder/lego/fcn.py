@@ -37,10 +37,14 @@ class FCNAssembleLego(BaseLego):
     '''
 
     def __init__(self, params):
-        self._required = ['skip_source_layer', 'num_classes']
+        self._required = ['skip_source_layer', 'num_classes',
+                          'seg_label', 'normalize', 'phase']
         self._check_required_params(params)
         self.skip_source_layer = params['skip_source_layer']
         self.num_classes = params['num_classes']
+        self.seg_label = params['seg_label']
+        self.normalize = params['normalize']
+        self.phase = params['phase']
 
     def attach(self, netspec, bottom):
         # Change default params
@@ -95,13 +99,20 @@ class FCNAssembleLego(BaseLego):
         scores = BaseLegoFunction('Crop', crop_params).attach(
             netspec, [upscore16, netspec['data']])
 
-        loss_param = dict(name='loss', loss_param=dict(normalize=False,
-                                                       ignore_label=255))
-        loss = BaseLegoFunction('SoftmaxWithLoss', loss_param).attach(
-            netspec, [scores, netspec['label']])
+        if self.phase != 'deploy':
+            loss_param = dict(name='fcn_loss',
+                              loss_param=dict(normalize=self.normalize,
+                                              ignore_label=255)
+                              )
+            last = BaseLegoFunction('SoftmaxWithLoss', loss_param).attach(
+                netspec, [scores, self.seg_label])
+        else:
+            softmax_param = dict(name='softmax')
+            last = BaseLegoFunction('Softmax', softmax_param).attach(
+                netspec, [scores])
 
         # Reset default params
         Config.set_default_params('Convolution', 'bias_term',
                                   False)
 
-        return loss
+        return last

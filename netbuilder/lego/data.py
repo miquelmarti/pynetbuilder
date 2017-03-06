@@ -6,7 +6,7 @@ Please see LICENSE file in the project root for terms.
 Modified by Miquel Marti miquelmr@kth.se
 """
 
-from base import BaseLego
+from base import BaseLego, BaseLegoFunction
 
 from caffe.proto import caffe_pb2
 import google.protobuf as pb
@@ -47,6 +47,23 @@ class ImageDataLego(BaseLego):
         netspec['data'] = data_lego
         netspec['label'] = label_lego
         return data_lego, label_lego
+
+class DeployInputLego(BaseLego):
+    '''
+    Lego for Input layer for deployment networks
+    '''
+    def __init__(self, params={}):
+        if 'size' in params.keys():
+            size = params['size']
+        else:
+            size = 300
+        self.name = 'data'
+        self.input_param=dict(shape=dict(dim=[1, 3, size, size]))
+
+    def attach(self, netspec):
+        data_lego = L.Input(name=self.name, input_param=self.input_param)
+        netspec['data'] = data_lego
+        return data_lego
 
 
 class VOCSegDataLego(BaseLego):
@@ -126,6 +143,7 @@ class VOCDetDataLego(BaseLego):
             }
     _test_transform_param = {
             'mean_value': [104, 117, 123],
+            'force_color': True,
             'resize_param': {
                     'prob': 1,
                     'resize_mode': P.Resize.WARP,
@@ -226,25 +244,20 @@ class VOCDetDataLego(BaseLego):
                         #   'batch_sampler_config', 'transform_param_config']
         self._check_required_params(params)
         if params['phase'] == 'train':
-            self.include = dict(phase=caffe.TRAIN)
             self.ntop = 2
             self.transform_param = self._train_transform_param
-
-        elif params['phase'] == 'test':
-            self.include = dict(phase=caffe.TEST)
+            self.annotated_data_param = dict(
+                batch_sampler=self._batch_sampler,
+                label_map_file=params['label_map_file']
+                )
+        else:
             self.ntop = 2
             self.transform_param = self._test_transform_param
+            self.annotated_data_param = dict(
+                batch_sampler=[{}],
+                label_map_file=params['label_map_file']
+                )
 
-        elif params['phase'] == 'deploy':
-            raise Exception("Deploy phase not implemented")
-            self.include = dict(phase=caffe.TEST)
-            self.ntop = 1
-            self.transform_param = self._test_transform_param
-
-        self.annotated_data_param = dict(
-            batch_sampler=self._batch_sampler,
-            label_map_file=params['label_map_file']
-            )
         self.data_param = params['data_param']
 
         if params['anno_type'] is not None:
@@ -255,8 +268,7 @@ class VOCDetDataLego(BaseLego):
             data, label = L.AnnotatedData(
                 name="data", annotated_data_param=self.annotated_data_param,
                 data_param=self.data_param, ntop=self.ntop,
-                transform_param=self.transform_param,
-                include=self.include
+                transform_param=self.transform_param
                 )
             netspec['data'] = data
             netspec['label'] = label
@@ -266,8 +278,34 @@ class VOCDetDataLego(BaseLego):
             data = L.AnnotatedData(
                 name="data", annotated_data_param=self.annotated_data_param,
                 data_param=self.data_param, ntop=self.ntop,
-                transform_param=self.transform_param,
-                include=self.include
+                transform_param=self.transform_param
                 )
             netspec['data'] = data
             return data
+
+
+class VOCSegDetDataLego(BaseLego):
+    '''
+    Lego for using the python data layers for PascalVOC from
+    https://github.com/miquelmarti/MultiTask4RT that provides annotations for
+    both Semantic Segmentation and Object Detection.
+    Needs to be in the python path.
+    '''
+
+    def __init__(self, params):
+        self._required = [list_file']
+        self._check_required_params(params)
+        self.pydata_params = dict(list_file=params['list_file'],
+                                  mean=(104.00699, 116.66877, 122.67892),
+                                  seed=1337)
+        self.pylayer = 'VOCSegDetDataLayer'
+
+    def attach(self, netspec):
+        data, seg_label, det_label = L.Python(
+            module='segdet_layers', layer=self.pylayer, ntop=3,
+            param_str=str(self.pydata_params))
+
+        netspec['data'] = data
+        netspec['seg_label'] = seg_label
+        netspec['det_label'] = det_label
+        return data, seg_label, det_label

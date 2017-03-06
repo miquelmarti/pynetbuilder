@@ -15,7 +15,7 @@ def get_vgg_fcn(is_train=True):
 
 
 def get_resnet_fcn(params):
-    from lego.data import VOCSegDataLego
+    from lego.data import VOCSegDataLego, DeployInputLego
     from lego.fcn import FCNAssembleLego
     from lego.basenet import ResNetLego
 
@@ -33,7 +33,12 @@ def get_resnet_fcn(params):
     netspec = caffe.NetSpec()
 
     # data layer
-    if data_layer == 'pascal':
+    # data layer
+    if phase == 'deploy':
+        data_params = dict(size=500)
+        data = DeployInputLego(data_params).attach(netspec)
+        label = None
+    elif data_layer == 'pascal':
         data_params = dict(phase=phase, split=split, data_dir=data_dir)
         data, label = VOCSegDataLego(data_params).attach(netspec)
     else:
@@ -45,7 +50,8 @@ def get_resnet_fcn(params):
     last = ResNetLego(resnet_params).attach(netspec, [data])
 
     fcn_params = dict(skip_source_layer=skip_source_layer,
-                      num_classes=num_classes, phase=phase)
+                      num_classes=num_classes, phase=phase,
+                      seg_label=label, normalize=False)
     FCNAssembleLego(fcn_params).attach(netspec, [netspec[attach_layer]])
 
     return netspec
