@@ -293,7 +293,7 @@ class VOCSegDetDataLego(BaseLego):
     '''
 
     def __init__(self, params):
-        self._required = [list_file']
+        self._required = ['list_file']
         self._check_required_params(params)
         self.pydata_params = dict(list_file=params['list_file'],
                                   mean=(104.00699, 116.66877, 122.67892),
