@@ -55,14 +55,14 @@ parser.add_argument('--name_size_file', help="""Name size file""",
 # Train/test params
 parser.add_argument('-g', '--gpu_list',
                     help="""List of gpus to use, CPU if empty""",
-                    nargs="+", default=[0, 1])
+                    nargs="*", default=[0, 1])
 parser.add_argument('-bs', '--batch_size', help="""Total batch size""",
                     type=int, default=32)
 parser.add_argument('--batch_size_per_device',
                     help="""Batch size per gpu""",
                     type=int, default=4)
 parser.add_argument('--test_out_dir', help="""Directory for test results""",
-                    default='~')
+                    default='')
 parser.add_argument('--weights', help="""Weights file from which to start
     the training """, default='')
 
@@ -77,9 +77,9 @@ parser.add_argument('-m', '--main_branch', help="""normal, bottleneck""",
 # SSD params
 parser.add_argument('--mbox_source_layers', nargs='+', help="""Names of layers
     where detection heads will be attached""")
-parser.add_argument('--extra_blocks', type=int, nargs='+', help="""Number of
+parser.add_argument('--extra_blocks', type=int, nargs='*', help="""Number of
     extra Blocks to be attached to Detection network""", default=[3, 3])
-parser.add_argument('--extra_num_outputs', type=int, nargs='+', help="""Number
+parser.add_argument('--extra_num_outputs', type=int, nargs='*', help="""Number
     of outputs of extra blocks Detection network""", default=[1024, 1024])
 parser.add_argument('--extra_layer_attach', help="""Name of layer where extra
     Blocks will be attached""")
@@ -91,7 +91,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    # source, main_branch, num_output_stage1, fc_layers, blocks
+    if not os.path.exists(args.output_folder):
+        os.makedirs(args.output_folder)
+    if not os.path.exists(os.path.join(args.output_folder, 'snapshots')):
+        os.makedirs(os.path.join(args.output_folder, 'snapshots'))
+
     res_params = dict(main_branch=args.main_branch,
                       data_layer=args.data_layer,
                       num_output_stage1=args.num_output_stage1,
@@ -102,15 +106,29 @@ if __name__ == '__main__':
                       extra_layer_attach=args.extra_layer_attach,
                       num_classes=args.num_classes)
 
-    print args.type
+    layers_x_block = 2 if args.main_branch == "normal" else 3
+    n_layers = sum(map(lambda x: x*layers_x_block, args.blocks)) + 2
+    print args.type, n_layers
 
     num_gpus = len(args.gpu_list)
     iter_size = args.batch_size / (args.batch_size_per_device *
                                    num_gpus)
-    print "Real batch size: ", (iter_size * num_gpus *
-                                args.batch_size_per_device)
-    for g in args.gpu_list:
-        print "Batch size gpu", g, "=", args.batch_size_per_device
+    print "Accum batch size: ", (iter_size * num_gpus *
+                                 args.batch_size_per_device)
+    print "Iteration size: ", iter_size
+    print "Batch size x {} gpu: ".format(num_gpus), args.batch_size_per_device
+
+    # TODO: Add this computations
+    # neg_pos_ratio = 3.
+    # loc_weight = (neg_pos_ratio + 1.) / 4.
+    # if normalization_mode == P.Loss.NONE:
+    #     base_lr /= batch_size_per_device
+    # elif normalization_mode == P.Loss.VALID:
+    #     base_lr *= 25. / loc_weight
+    # elif normalization_mode == P.Loss.FULL:
+    #     # Roughly there are 2000 prior bboxes per image.
+    #     # TODO(weiliu89): Estimate the exact # of priors.
+    #     base_lr *= 2000.
 
     with open(args.name_size_file, 'r') as f:
         num_test_image = len(f.readlines())
@@ -127,11 +145,9 @@ if __name__ == '__main__':
         res_params['name_size_file'] = args.name_size_file
         res_params['test_out_dir'] = args.test_out_dir
         netspec = get_resnet_ssdnet(res_params)
-
-        layers_x_block = 2 if args.main_branch == "normal" else 3
-        n_layers = sum(map(lambda x: x*layers_x_block, args.blocks)) + 2
         name = 'ssdResnet'+str(n_layers)
 
+    # TODO: Fix this, not working for some reason
     # from tools.complexity import get_complexity
     # params, flops = get_complexity(netspec=netspec)
     # print 'Number of params: ', (1.0 * params) / 1000000.0, ' Million'
@@ -187,16 +203,30 @@ if __name__ == '__main__':
               'solver_score.prototxt'), 'w') as fp:
         print >> fp, solver
 
+    # DEPLOY NET
+    if args.type == 'VGG':
+        netspec = get_vgg_ssdnet(is_train=False)
+    else:
+        res_params['phase'] = 'deploy'
+        netspec = get_resnet_ssdnet(res_params)
+
+    with open(os.path.join(args.output_folder, 'deploy.prototxt'), 'w') as fp:
+        print >> fp, 'name: "' + name + '-deploy"'
+        print >> fp, netspec.to_proto()
+
     # Create train script
     with open(os.path.join(args.output_folder, 'train.sh'), 'w') as fp:
         print >> fp, 'DATE=`date +%Y-%m-%d_%H-%M-%S`'
         print >> fp, '$CAFFE_ROOT/build/tools/caffe train \\'
         print >> fp, '--solver="{}" \\'.format(
-            os.path.join(args.output_folder, 'test.prototxt')
+            os.path.join(os.path.abspath(
+                args.output_folder), 'solver.prototxt')
             )
         if args.weights != '':
-            print >> fp, '--weights="{}" \\'.format(args.weights)
+            print >> fp, '--weights="{}" \\'.format(os.path.abspath(
+                args.weights))
         print >> fp, '--gpu {} 2>&1  | tee {}'.format(
             ",".join(str(x) for x in args.gpu_list),
-            os.path.join(args.output_folder, "train_$DATE.log")
+            os.path.join(os.path.abspath(
+                args.output_folder), "train_$DATE.log")
             )

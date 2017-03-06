@@ -294,15 +294,22 @@ class MBoxAssembleLego(BaseLego):
             'normalization': normalization_mode,
             }
 
-        mbox_layers.append(label)
-
-        BaseLegoFunction('MultiBoxLoss', dict(name='mbox_loss',
-                                               multibox_loss_param=multibox_loss_param,
-            loss_param=loss_param, include=dict(phase=caffe_pb2.Phase.Value('TRAIN')),
-            propagate_down=[True, True, False, False])).attach(netspec, mbox_layers)
 
 
-        if phase == 'test':
+        if phase == 'train':
+            mbox_layers.append(label)
+            BaseLegoFunction('MultiBoxLoss', dict(name='mbox_loss',
+                                                   multibox_loss_param=multibox_loss_param,
+                                                   loss_param=loss_param,
+                                                   propagate_down=[True, True, False, False])).attach(netspec, mbox_layers)
+        else:
+            if phase == 'test':
+                mbox_layers.append(label)
+                BaseLegoFunction('MultiBoxLoss', dict(name='mbox_loss',
+                                                       multibox_loss_param=multibox_loss_param,
+                    loss_param=loss_param,
+                    propagate_down=[True, True, False, False])).attach(netspec, mbox_layers)
+
             # parameters for generating detection output.
             det_out_param = {
                 'num_classes': num_classes,
@@ -340,12 +347,17 @@ class MBoxAssembleLego(BaseLego):
             netspec[flatten_name] = L.Flatten(netspec[softmax_name], axis=1)
             mbox_layers[1] = netspec[flatten_name]
 
-            netspec.detection_out = L.DetectionOutput(*mbox_layers,
-                detection_output_param=det_out_param,
-                include=dict(phase=caffe_pb2.Phase.Value('TEST')))
-            netspec.detection_eval = L.DetectionEvaluate(netspec.detection_out, netspec.label,
-                detection_evaluate_param=det_eval_param,
-                include=dict(phase=caffe_pb2.Phase.Value('TEST')))
+            if phase  == 'test':
+                netspec.detection_out = L.DetectionOutput(*mbox_layers,
+                    detection_output_param=det_out_param
+                    )
+                netspec.detection_eval = L.DetectionEvaluate(netspec.detection_out, label,
+                    detection_evaluate_param=det_eval_param
+                    )
+            else:
+                netspec.detection_out = L.DetectionOutput(*mbox_layers,
+                    detection_output_param=det_out_param
+                    )
 
 
 class SSDExtraLayersLego(BaseLego):
@@ -392,7 +404,7 @@ class SSDExtraLayersLego(BaseLego):
             # Add global pooling layer.
             pool_param = dict(name='pool6', pool=P.Pooling.AVE,
                               global_pooling=True)
-            pool = BaseLegoFunction('Pooling', pool_param).attach(
+            last = BaseLegoFunction('Pooling', pool_param).attach(
                 netspec, last)
 
         elif self.base_network == "Resnet":
@@ -418,13 +430,14 @@ class SSDExtraLayersLego(BaseLego):
                     last = ShortcutLego(params).attach(netspec, last)
                     last = [last]
 
-            # Add global pooling layer.
-            pool_param = dict(name='pool_last', pool=P.Pooling.AVE,
-                              global_pooling=True)
-            pool = BaseLegoFunction('Pooling', pool_param).attach(
-                netspec, last)
+            # Add global pooling layer to last added layer.
+            if len(self.extra_blocks) > 0:
+                pool_param = dict(name='pool_last', pool=P.Pooling.AVE,
+                                  global_pooling=True)
+                last = BaseLegoFunction('Pooling', pool_param).attach(
+                    netspec, last)
         else:
             raise Exception('Base network unknown.',
                             'Currently supported VGGnet and Resnet')
 
-        return pool
+        return last

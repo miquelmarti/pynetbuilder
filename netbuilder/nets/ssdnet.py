@@ -55,7 +55,7 @@ def get_vgg_ssdnet(is_train=True):
 
 
 def get_resnet_ssdnet(params):
-    from lego.data import VOCDetDataLego
+    from lego.data import VOCDetDataLego, DeployInputLego
     from lego.ssd import MBoxUnitLego, MBoxAssembleLego, SSDExtraLayersLego
     from lego.base import BaseLegoFunction
     from lego.basenet import ResNetLego
@@ -75,12 +75,14 @@ def get_resnet_ssdnet(params):
     extra_blocks = params['extra_blocks']
     extra_num_outputs = params['extra_num_outputs']
 
-
-
     netspec = caffe.NetSpec()
 
     # data layer
-    if data_layer == 'pascal':
+    if phase == 'deploy':
+        data_params = dict(size=500)
+        data = DeployInputLego(data_params).attach(netspec)
+        label = None
+    elif data_layer == 'pascal':
         data_params = dict(
             phase=phase,
             data_param=dict(batch_size=batch_size_per_device,
@@ -109,7 +111,7 @@ def get_resnet_ssdnet(params):
         netspec, [netspec[extra_layer_attach]])
 
     num_classes = params['num_classes']
-    min_dim = 300
+    min_dim = 300  # TODO: Parameter
     mbox_source_layers = params['mbox_source_layers']
 
     min_ratio = 20
@@ -124,8 +126,9 @@ def get_resnet_ssdnet(params):
     min_sizes = [min_dim * 10 / 100.] + min_sizes
     max_sizes = [[]] + max_sizes
     aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3]]
+
     # L2 normalize conv4_3.
-    normalizations = [20, 20, 20, -1, -1, -1]
+    normalizations = [-1, -1, -1, -1, -1, -1]
     # normalizations = [-1, -1, -1, -1, -1, -1]
 
     # print min_sizes
@@ -141,6 +144,6 @@ def get_resnet_ssdnet(params):
                            output_directory=output_directory,
                            label_map_file=label_map_file,
                            name_size_file=name_size_file)
-    MBoxAssembleLego(assemble_params).attach(netspec, [netspec['label']])
+    MBoxAssembleLego(assemble_params).attach(netspec, [label])
 
     return netspec
