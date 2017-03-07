@@ -14,7 +14,7 @@ DATASETS_DIR = os.environ['DATASETS']
 sys.path.append('netbuilder')
 
 from tools.complexity import get_complexity
-from nets.fcn_ssd import get_resnet_fcn_ssd
+from nets.multinet import get_resnet_multi
 
 parser = ArgumentParser(description="""
     This script generates multi-task networks for Object detection and
@@ -48,6 +48,8 @@ parser.add_argument('--name_size_file', help="""Name size file""",
                     default=os.path.join(
                         DATASETS_DIR,
                         'VOCdevkit/VOC0712/test_name_size.txt'))
+parser.add_argument('--tasks', help="""Tasks to add: 'fcn', 'ssd', 'all' """,
+                    default="all")
 
 # Train/test params
 parser.add_argument('-g', '--gpu_list',
@@ -107,7 +109,8 @@ if __name__ == '__main__':
                       mbox_source_layers=args.mbox_source_layers,
                       attach_layer=args.attach_layer,
                       num_classes=args.num_classes,
-                      skip_source_layer=args.skip_source_layer)
+                      skip_source_layer=args.skip_source_layer,
+                      tasks=args.tasks)
 
     layers_x_block = 2 if args.main_branch == "normal" else 3
     n_layers = sum(map(lambda x: x*layers_x_block, args.blocks)) + 2
@@ -135,7 +138,7 @@ if __name__ == '__main__':
         res_params['label_map_file'] = args.label_map_file
         res_params['name_size_file'] = args.name_size_file
         res_params['test_out_dir'] = args.test_out_dir
-        netspec = get_resnet_fcn_ssd(res_params)
+        netspec = get_resnet_multi(res_params)
         name = 'multiResnet'+str(n_layers)
 
     # from tools.complexity import get_complexity
@@ -172,7 +175,7 @@ if __name__ == '__main__':
         res_params['label_map_file'] = args.label_map_file
         res_params['name_size_file'] = args.name_size_file
         res_params['test_out_dir'] = args.test_out_dir
-        netspec = get_resnet_fcn_ssd(res_params)
+        netspec = get_resnet_multi(res_params)
 
     with open(os.path.join(args.output_folder, 'test.prototxt'), 'w') as fp:
         print >> fp, 'name: "' + name + '-test"'
@@ -198,7 +201,7 @@ if __name__ == '__main__':
         netspec = get_vgg_ssdnet(is_train=False)
     else:
         res_params['phase'] = 'deploy'
-        netspec = get_resnet_fcn_ssd(res_params)
+        netspec = get_resnet_multi(res_params)
 
     with open(os.path.join(args.output_folder, 'deploy.prototxt'), 'w') as fp:
         print >> fp, 'name: "' + name + '-deploy"'
