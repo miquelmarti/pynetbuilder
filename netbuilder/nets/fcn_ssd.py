@@ -61,13 +61,13 @@ def get_resnet_fcn_ssd(params):
     FCNAssembleLego(fcn_params).attach(netspec, [netspec[attach_layer]])
 
     # SSD branch
-    # use_global_stats = True
-    # extrassd_params = dict(base_network='Resnet', main_branch=main_branch,
-    #                        extra_blocks=extra_blocks,
-    #                        extra_num_outputs=extra_num_outputs,
-    #                        use_global_stats=use_global_stats)
-    # extra_last = SSDExtraLayersLego(extrassd_params).attach(
-    #     netspec, [netspec[attach_layer]])
+    use_global_stats = True
+    extrassd_params = dict(base_network='Resnet', main_branch=main_branch,
+                           extra_blocks=extra_blocks,
+                           extra_num_outputs=extra_num_outputs,
+                           use_global_stats=use_global_stats)
+    extra_last = SSDExtraLayersLego(extrassd_params).attach(
+        netspec, [netspec[attach_layer]])
 
     min_dim = 300  # TODO: Parameter
 
