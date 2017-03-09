@@ -81,7 +81,7 @@ def get_resnet_multi(params):
         min_dim = 300  # TODO: Parameter
 
         min_ratio = 20
-        max_ratio = 95
+        max_ratio = 90
         step = int(math.floor((max_ratio - min_ratio) /
                               (len(mbox_source_layers) - 2)))
         min_sizes = []
@@ -90,15 +90,16 @@ def get_resnet_multi(params):
             min_sizes.append(min_dim * ratio / 100.)
             max_sizes.append(min_dim * (ratio + step) / 100.)
         min_sizes = [min_dim * 10 / 100.] + min_sizes
-        max_sizes = [[]] + max_sizes
-        aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2, 3], [2, 3]]
-        normalizations = [-1, -1, -1, -1, -1, -1]
+        max_sizes = [min_dim * 20 / 100.] + max_sizes
+        steps = [8, 16, 32, 64, 100, 300]
+        aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2], [2]]
+        normalizations = [20, -1, -1, -1, -1, -1]
 
         assemble_params = dict(mbox_source_layers=mbox_source_layers,
                                normalizations=normalizations,
                                aspect_ratios=aspect_ratios,
                                num_classes=num_classes,
-                               min_sizes=min_sizes,
+                               min_sizes=min_sizes, steps=steps,
                                max_sizes=max_sizes, phase=phase,
                                output_directory=output_directory,
                                label_map_file=label_map_file,

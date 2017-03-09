@@ -6,27 +6,26 @@ Please see LICENSE file in the project root for terms.
 Modified by Miquel Marti miquelmr@kth.se
 """
 
-from base import BaseLego
-from base import BaseLegoFunction
+from base import BaseLego, BaseLegoFunction
 
-from caffe.proto import caffe_pb2
-import google.protobuf as pb
 from caffe import layers as L
 from caffe import params as P
-import caffe
 from copy import deepcopy
 
 '''
     This module contains all the hybrid legos needed for
     generating networks for object detection using
-    SSD (Single shot multibox detector: https://github.com/weiliu89/caffe/tree/ssd
-    The code is inspired/refactored from the above repository
+    SSD (Single shot multibox detector:
+    https://github.com/weiliu89/caffe/tree/ssd
+    The code is inspired/refactored from the above repository.
 '''
 
-'''
-    Basic structure for location or confidence prediction layers
-'''
+
 class PredictionLego(BaseLego):
+    '''
+        Basic structure for location or confidence prediction layers
+    '''
+
     def __init__(self, params):
         self._required = ['name', 'num_output']
         self._check_required_params(params)
@@ -40,18 +39,23 @@ class PredictionLego(BaseLego):
 
     def attach(self, netspec, bottom):
         from hybrid import ConvBNLego, ConvReLULego
-        conv = BaseLegoFunction('Convolution', self.conv_params).attach(netspec, bottom)
-        perm = BaseLegoFunction('Permute', self.perm_params).attach(netspec, [conv])
-        flat = BaseLegoFunction('Flatten', self.flat_params).attach(netspec, [perm])
+        conv = BaseLegoFunction('Convolution',
+                                self.conv_params).attach(netspec, bottom)
+        perm = BaseLegoFunction('Permute',
+                                self.perm_params).attach(netspec, [conv])
+        flat = BaseLegoFunction('Flatten',
+                                self.flat_params).attach(netspec, [perm])
         return flat
 
-'''
-    This lego attaches multiple conv layers for non-linear
-    prediction units.
-    First layer is 3x3, followed by multiple 1x1 units.
-    num_outputs specifies the number of filters in each layer
-'''
+
 class DeepPredictionLego(BaseLego):
+    '''
+        This lego attaches multiple conv layers for non-linear
+        prediction units.
+        First layer is 3x3, followed by multiple 1x1 units.
+        num_outputs specifies the number of filters in each layer
+    '''
+
     def __init__(self, params):
         self._required = ['name', 'num_outputs', 'use_global_stats']
         self._check_required_params(params)
@@ -65,19 +69,20 @@ class DeepPredictionLego(BaseLego):
     def attach(self, netspec, bottom):
         from hybrid import ConvBNReLULego, ConvBNLego, ShortcutLego
         # attach 3x3 conv layer
-        conv_params = dict(name=self.name + '_3by3' , num_output=self.num_outputs[0],
-                                 kernel_size=3, pad=1, stride=1,
-                                 use_global_stats=self.use_global_stats)
+        conv_params = dict(name=self.name + '_3by3',
+                           num_output=self.num_outputs[0],
+                           kernel_size=3, pad=1, stride=1,
+                           use_global_stats=self.use_global_stats)
         if len(self.num_outputs) == 1:
             last = ConvBNLego(conv_params).attach(netspec, bottom)
         else:
             last = ConvBNReLULego(conv_params).attach(netspec, bottom)
 
-
         for i in range(1, len(self.num_outputs)):
-            params = dict(name=self.name + '_1by1_' + str(i) , num_output=self.num_outputs[i],
-                                 kernel_size=1, pad=0, stride=1,
-                                 use_global_stats=self.use_global_stats)
+            params = dict(name=self.name + '_1by1_' + str(i),
+                          num_output=self.num_outputs[i],
+                          kernel_size=1, pad=0, stride=1,
+                          use_global_stats=self.use_global_stats)
             if i == len(self.num_outputs) - 1:
                 last = ConvBNLego(params).attach(netspec, [last])
             else:
@@ -86,27 +91,31 @@ class DeepPredictionLego(BaseLego):
                 params['shortcut'] = 'identity'
                 last = ShortcutLego(params).attach(netspec, [last])
 
-
-        perm = BaseLegoFunction('Permute', self.perm_params).attach(netspec, [last])
-        flat = BaseLegoFunction('Flatten', self.flat_params).attach(netspec, [perm])
+        perm = BaseLegoFunction('Permute',
+                                self.perm_params).attach(netspec, [last])
+        flat = BaseLegoFunction('Flatten',
+                                self.flat_params).attach(netspec, [perm])
 
         return flat
 
 
-'''
-    Structure for attaching multibox prediction unit to a layers in a
-    network.
-    A mbox unit contains:
-    1. Location prediction layers
-    2. Confidence prediction layers
-    3. Prior box layers
-
-    This corresponds to CreateMultiBoxHead function here:
-    https://github.com/weiliu89/caffe/blob/ssd/python/caffe/model_libs.py#L581
-'''
 class MBoxUnitLego(BaseLego):
+    '''
+        Structure for attaching multibox prediction unit to a layers in a
+        network.
+        A mbox unit contains:
+        1. Location prediction layers
+        2. Confidence prediction layers-1
+        3. Prior box layers
+
+        This corresponds to CreateMultiBoxHead function here:
+        https://github.com/weiliu89/caffe/blob/ssd/python/caffe/model_libs.py#L581
+    '''
+
     def __init__(self, params):
-        self._required = ['name', 'num_classes', 'num_priors_per_location', 'min_size', 'max_size', 'aspect_ratio', 'use_global_stats']
+        self._required = ['name', 'num_classes', 'num_priors_per_location',
+                          'min_size', 'max_size', 'aspect_ratio',
+                          'use_global_stats']
         self._check_required_params(params)
         self.params = params
 
@@ -116,7 +125,6 @@ class MBoxUnitLego(BaseLego):
     '''
     def attach(self, netspec, bottom):
 
-
         if self.params['type'] == 'deep':
             # Location prediction layers
 
@@ -124,7 +132,8 @@ class MBoxUnitLego(BaseLego):
 
             num_outputs = []
             for i in range(self.params['depth']):
-                num_outputs.append(self.params['num_priors_per_location'] * 4 * deep_mult)
+                num_outputs.append(self.params['num_priors_per_location'] *
+                                   4 * deep_mult)
             num_outputs.append(self.params['num_priors_per_location'] * 4)
 
             loc_params = dict()
@@ -136,8 +145,10 @@ class MBoxUnitLego(BaseLego):
             # Confidence prediction layers
             num_outputs = []
             for i in range(self.params['depth']):
-                num_outputs.append(self.params['num_priors_per_location'] * self.params['num_classes'] * deep_mult)
-            num_outputs.append(self.params['num_priors_per_location'] * self.params['num_classes'])
+                num_outputs.append(self.params['num_priors_per_location'] *
+                                   self.params['num_classes'] * deep_mult)
+            num_outputs.append(self.params['num_priors_per_location'] *
+                               self.params['num_classes'])
 
             conf_params = dict()
             conf_params['name'] = self.params['name'] + '_mbox_conf'
@@ -149,8 +160,10 @@ class MBoxUnitLego(BaseLego):
             # Confidence prediction layers
             conf_params = dict()
             conf_params['name'] = self.params['name'] + '_mbox_conf'
-            conf_params['num_output'] = self.params['num_classes'] * self.params['num_priors_per_location']
-            # conf_params['num_outputs'] = [self.params['num_classes'] * self.params['num_priors_per_location']]
+            conf_params['num_output'] = self.params['num_classes'] * \
+                self.params['num_priors_per_location']
+            # conf_params['num_outputs'] = [self.params['num_classes'] *
+            #                              self.params['num_priors_per_location']]
             # comment below line to go original way of detection heads
             # conf_params['use_global_stats'] = self.params['use_global_stats']
             conf = PredictionLego(conf_params).attach(netspec, [bottom[0]])
@@ -158,34 +171,38 @@ class MBoxUnitLego(BaseLego):
             # Location prediction layers
             loc_params = dict()
             loc_params['name'] = self.params['name'] + '_mbox_loc'
-            loc_params['num_output'] = self.params['num_priors_per_location'] * 4
-            # loc_params['num_outputs'] = [self.params['num_priors_per_location'] * 4]
+            loc_params['num_output'] = \
+                self.params['num_priors_per_location'] * 4
+            # loc_params['num_outputs'] = \
+            #   [self.params['num_priors_per_location'] * 4]
             # comment below line to go original way of detection heads
             # loc_params['use_global_stats'] = self.params['use_global_stats']
             loc = PredictionLego(loc_params).attach(netspec, [bottom[0]])
 
         # Priorbox layers
         prior_box_params = dict(min_size=self.params['min_size'],
-                            aspect_ratio=self.params['aspect_ratio'],
-                            flip=True, clip=True,
-                            variance=[0.1, 0.1, 0.2, 0.2])
+                                aspect_ratio=self.params['aspect_ratio'],
+                                flip=True, clip=False, offset=0.5,
+                                variance=[0.1, 0.1, 0.2, 0.2])
         if self.params['max_size']:
             prior_box_params['max_size'] = self.params['max_size']
 
         prior_params = dict(name=self.params['name'] + '_mbox_priorbox',
                             prior_box_param=prior_box_params)
-        prior = BaseLegoFunction('PriorBox', prior_params).attach(netspec, bottom)
+        prior = BaseLegoFunction('PriorBox',
+                                 prior_params).attach(netspec, bottom)
 
         return [loc, conf, prior]
 
 
-'''
-    This lego does the following:
-    1. Takes a list of layers
-    2. Attaches mbox units
-    3. Joins them together and attaches MBox Loss
-'''
 class MBoxAssembleLego(BaseLego):
+    '''
+        This lego does the following:
+        1. Takes a list of layers
+        2. Attaches mbox units
+        3. Joins them together and attaches MBox Loss
+    '''
+
     def __init__(self, params):
         self._required = ['mbox_source_layers', 'num_classes',
                           'normalizations', 'aspect_ratios', 'min_sizes',
@@ -202,6 +219,7 @@ class MBoxAssembleLego(BaseLego):
         aspect_ratios = self.params['aspect_ratios']
         min_sizes = self.params['min_sizes']
         max_sizes = self.params['max_sizes']
+        steps = self.params['steps']
         phase = self.params['phase']
         label_map_file = self.params['label_map_file']
         name_size_file = self.params['name_size_file']
@@ -242,28 +260,37 @@ class MBoxAssembleLego(BaseLego):
 
             num_priors_per_location += len(aspect_ratio)
 
-            params = dict(name=layer_name, num_classes=num_classes, num_priors_per_location=num_priors_per_location,
-                      min_size=min_sizes[i], max_size=max_sizes[i], aspect_ratio=aspect_ratio,
-                       use_global_stats=use_global_stats)
+            params = dict(name=layer_name, num_classes=num_classes,
+                          num_priors_per_location=num_priors_per_location,
+                          min_size=min_sizes[i], max_size=max_sizes[i],
+                          step=steps[i],
+                          aspect_ratio=aspect_ratio,
+                          use_global_stats=use_global_stats)
 
             params['deep_mult'] = 4
             params['type'] = 'linear'
             # params['type'] = 'deep'
             # params['depth'] = 3
 
-            arr = MBoxUnitLego(params).attach(netspec, [netspec[layer_name], netspec['data']])
+            arr = MBoxUnitLego(params).attach(
+                netspec, [netspec[layer_name], netspec['data']])
             loc.append(arr[0])
             conf.append(arr[1])
             prior.append(arr[2])
 
             mbox_layers = []
-            locs = BaseLegoFunction('Concat', dict(name='mbox_loc', axis=1)).attach(netspec, loc)
+            locs = BaseLegoFunction('Concat',
+                                    dict(name='mbox_loc',
+                                         axis=1)).attach(netspec, loc)
             mbox_layers.append(locs)
-            confs = BaseLegoFunction('Concat', dict(name='mbox_conf', axis=1)).attach(netspec, conf)
+            confs = BaseLegoFunction('Concat',
+                                     dict(name='mbox_conf',
+                                          axis=1)).attach(netspec, conf)
             mbox_layers.append(confs)
-            priors = BaseLegoFunction('Concat', dict(name='mbox_priorbox', axis=2)).attach(netspec, prior)
+            priors = BaseLegoFunction('Concat',
+                                      dict(name='mbox_priorbox',
+                                           axis=2)).attach(netspec, prior)
             mbox_layers.append(priors)
-
 
         # MultiBoxLoss parameters.
         share_location = True
@@ -271,6 +298,7 @@ class MBoxAssembleLego(BaseLego):
         train_on_diff_gt = True
         normalization_mode = P.Loss.VALID
         code_type = P.PriorBox.CENTER_SIZE
+        ignore_cross_boundary_bbox = False
         neg_pos_ratio = 3.
         loc_weight = (neg_pos_ratio + 1.) / 4.
         mining_type = P.MultiBoxLoss.MAX_NEGATIVE
@@ -289,26 +317,30 @@ class MBoxAssembleLego(BaseLego):
             'neg_pos_ratio': neg_pos_ratio,
             'neg_overlap': 0.5,
             'code_type': code_type,
+            'ignore_cross_boundary_bbox': ignore_cross_boundary_bbox
             }
         loss_param = {
             'normalization': normalization_mode,
             }
 
-
-
         if phase == 'train':
             mbox_layers.append(label)
-            BaseLegoFunction('MultiBoxLoss', dict(name='mbox_loss',
-                                                   multibox_loss_param=multibox_loss_param,
-                                                   loss_param=loss_param,
-                                                   propagate_down=[True, True, False, False])).attach(netspec, mbox_layers)
+            BaseLegoFunction('MultiBoxLoss',
+                             dict(name='mbox_loss',
+                                  multibox_loss_param=multibox_loss_param,
+                                  loss_param=loss_param,
+                                  propagate_down=[True, True, False, False])
+                             ).attach(netspec, mbox_layers)
         else:
             if phase == 'test':
                 mbox_layers.append(label)
-                BaseLegoFunction('MultiBoxLoss', dict(name='mbox_loss',
-                                                       multibox_loss_param=multibox_loss_param,
-                    loss_param=loss_param,
-                    propagate_down=[True, True, False, False])).attach(netspec, mbox_layers)
+                BaseLegoFunction('MultiBoxLoss',
+                                 dict(name='mbox_loss',
+                                      multibox_loss_param=multibox_loss_param,
+                                      loss_param=loss_param,
+                                      propagate_down=[True, True,
+                                                      False, False])
+                                 ).attach(netspec, mbox_layers)
 
             # parameters for generating detection output.
             det_out_param = {
@@ -340,24 +372,23 @@ class MBoxAssembleLego(BaseLego):
 
             conf_name = "mbox_conf"
             reshape_name = "{}_reshape".format(conf_name)
-            netspec[reshape_name] = L.Reshape(netspec[conf_name], shape=dict(dim=[0, -1, num_classes]))
+            netspec[reshape_name] = L.Reshape(
+                netspec[conf_name], shape=dict(dim=[0, -1, num_classes]))
             softmax_name = "{}_softmax".format(conf_name)
             netspec[softmax_name] = L.Softmax(netspec[reshape_name], axis=2)
             flatten_name = "{}_flatten".format(conf_name)
             netspec[flatten_name] = L.Flatten(netspec[softmax_name], axis=1)
             mbox_layers[1] = netspec[flatten_name]
 
-            if phase  == 'test':
-                netspec.detection_out = L.DetectionOutput(*mbox_layers,
-                    detection_output_param=det_out_param
-                    )
-                netspec.detection_eval = L.DetectionEvaluate(netspec.detection_out, label,
-                    detection_evaluate_param=det_eval_param
-                    )
+            if phase == 'test':
+                netspec.detection_out = L.DetectionOutput(
+                    *mbox_layers, detection_output_param=det_out_param)
+                netspec.detection_eval = L.DetectionEvaluate(
+                    netspec.detection_out, label,
+                    detection_evaluate_param=det_eval_param)
             else:
-                netspec.detection_out = L.DetectionOutput(*mbox_layers,
-                    detection_output_param=det_out_param
-                    )
+                netspec.detection_out = L.DetectionOutput(
+                    *mbox_layers, detection_output_param=det_out_param)
 
 
 class SSDExtraLayersLego(BaseLego):

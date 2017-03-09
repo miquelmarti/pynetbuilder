@@ -14,16 +14,19 @@ from caffe import layers as L
 from caffe import params as P
 import caffe
 
-'''
-    Generic class to read data layer
-    info from config files.
-'''
+
 class ConfigDataLego(BaseLego):
+    '''
+        Generic class to read data layer
+        info from config files.
+    '''
+
     def __init__(self, data_file):
         self.data_file = data_file
 
     def attach(self, netspec):
         return
+
 
 class ImageDataLego(BaseLego):
     def __init__(self, params):
@@ -31,7 +34,7 @@ class ImageDataLego(BaseLego):
             params['include'] = dict(phase=caffe.TEST)
         elif params['include'] == 'train':
             params['include'] = dict(phase=caffe.TRAIN)
-        params['image_data_param'] = dict(source=params['source'] ,
+        params['image_data_param'] = dict(source=params['source'],
                                           batch_size=params['batch_size'])
         if 'mean_file' in params:
             params['transform_param'] = dict(mean_file=params['mean_file'])
@@ -48,17 +51,19 @@ class ImageDataLego(BaseLego):
         netspec['label'] = label_lego
         return data_lego, label_lego
 
+
 class DeployInputLego(BaseLego):
     '''
     Lego for Input layer for deployment networks
     '''
+
     def __init__(self, params={}):
         if 'size' in params.keys():
             size = params['size']
         else:
             size = 300
         self.name = 'data'
-        self.input_param=dict(shape=dict(dim=[1, 3, size, size]))
+        self.input_param = dict(shape=dict(dim=[1, 3, size, size]))
 
     def attach(self, netspec):
         data_lego = L.Input(name=self.name, input_param=self.input_param)
@@ -104,6 +109,7 @@ class VOCDetDataLego(BaseLego):
     https://github.com/weiliu89/caffe/tree/ssd
     '''
 
+    # TODO: Move default params to a config file
     _train_transform_param = {
             'mirror': True,
             'mean_value': [104, 117, 123],
@@ -241,7 +247,6 @@ class VOCDetDataLego(BaseLego):
 
     def __init__(self, params):
         self._required = ['phase', 'label_map_file', 'data_param', 'anno_type']
-                        #   'batch_sampler_config', 'transform_param_config']
         self._check_required_params(params)
         if params['phase'] == 'train':
             self.ntop = 2
@@ -296,7 +301,7 @@ class VOCSegDetDataLego(BaseLego):
         self._required = ['list_file']
         self._check_required_params(params)
         self.pydata_params = dict(list_file=params['list_file'],
-                                  mean=(104.00699, 116.66877, 122.67892),
+                                  mean=(104, 117, 123),
                                   seed=1337)
         self.pylayer = 'VOCSegDetDataLayer'
 
