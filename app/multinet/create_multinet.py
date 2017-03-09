@@ -1,4 +1,4 @@
-output_folder"""
+"""
 @author Miquel Marti miquelmr@kth.se
 """
 
@@ -122,9 +122,9 @@ if __name__ == '__main__':
     with open(args.name_size_file, 'r') as f:
         num_test_image = len(f.readlines())
 
-    output_folder = os.path.abspath(ags.output_folder)
+    output_folder = os.path.abspath(args.output_folder)
     # Create output directory if not existent, will overwrite previous content
-    if not os.path.exists(args.):
+    if not os.path.exists(args.output_folder):
         os.makedirs(output_folder)
     if not os.path.exists(os.path.join(output_folder, 'snapshots')):
         os.makedirs(os.path.join(output_folder, 'snapshots'))
@@ -139,7 +139,8 @@ if __name__ == '__main__':
                       attach_layer=args.attach_layer,
                       num_classes=args.num_classes,
                       skip_source_layer=args.skip_source_layer,
-                      tasks=args.tasks)
+                      tasks=args.tasks,
+                      min_dim=args.min_dim)
 
     # TRAIN NET
     if args.type == 'ResNet':
@@ -211,6 +212,8 @@ if __name__ == '__main__':
     if args.type == 'ResNet':
         res_params['phase'] = 'deploy'
         netspec = get_resnet_multi(res_params)
+    else:
+        raise NotImplementedError("This type of base network is not supported")
 
     with open(os.path.join(output_folder, 'deploy.prototxt'), 'w') as fp:
         print >> fp, 'name: "' + name + '-deploy"'
