@@ -398,12 +398,14 @@ class SSDExtraLayersLego(BaseLego):
         self.base_network = params['base_network']
         if self.base_network == "ResNet":
             self._required.extend(['extra_blocks', 'extra_num_outputs',
-                                   'main_branch', 'use_global_stats'])
+                                   'main_branch', 'use_global_stats',
+                                   'use_bn'])
             self._check_required_params(params)
             self.extra_blocks = params['extra_blocks']
             self.extra_num_outputs = params['extra_num_outputs']
             self.main_branch = params['main_branch']
             self.use_global_stats = params['use_global_stats']
+            self.use_bn = params['use_bn']
         else:
             raise NotImplementedError("This type of base network"
                                       "is not supported")
@@ -424,7 +426,10 @@ class SSDExtraLayersLego(BaseLego):
             for stage in range(len(self.extra_blocks)):
                 for block in range(self.extra_blocks[stage]):
                     if block == 0:
-                        shortcut = 'projection'
+                        if self.use_bn:
+                            shortcut = 'projection'
+                        else:
+                            shortcut = 'noBN_projection'
                         stride = 2
                     else:
                         shortcut = 'identity'
@@ -438,7 +443,11 @@ class SSDExtraLayersLego(BaseLego):
                                   main_branch=self.main_branch,
                                   stride=stride, filter_mult=None,
                                   use_global_stats=self.use_global_stats)
-                    last = ShortcutLego(params).attach(netspec, last)
+                    if self.use_bn:
+                        last = ShortcutLego(params).attach(netspec, last)
+                    else:
+                        params.update(dict(main_branch='noBN_bottleneck'))
+                        last = ShortcutLego(params).attach(netspec, last)
                     last = [last]
 
             # Add global pooling layer to last added layer.

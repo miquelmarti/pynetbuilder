@@ -77,10 +77,12 @@ def get_resnet_multi(params):
     # SSD branch
     if tasks in ['ssd', 'all']:
         use_global_stats = True
+        use_bn = False if batch_size_per_device == 1 else True
         extrassd_params = dict(base_network='ResNet', main_branch=main_branch,
                                extra_blocks=extra_blocks,
                                extra_num_outputs=extra_num_outputs,
-                               use_global_stats=use_global_stats)
+                               use_global_stats=use_global_stats,
+                               use_bn=use_bn)
         extra_last = SSDExtraLayersLego(extrassd_params).attach(
             netspec, [netspec[attach_layer]])
 
