@@ -103,7 +103,7 @@ if __name__ == '__main__':
         n_layers = sum(map(lambda x: x*layers_x_block, args.blocks)) + 2
     else:
         raise NotImplementedError("This type of base network is not supported")
-    print args.type, n_layers
+    print "Creating", args.type, n_layers, "with", args.tasks
 
     num_gpus = len(args.gpu_list)
     if num_gpus > 0:
@@ -165,6 +165,8 @@ if __name__ == '__main__':
         print >> fp, 'name: "' + name + '-train"'
         print >> fp, netspec.to_proto()
 
+    print "Created {} - train".format(name)
+
     # Create solver
     solver_params = {}
     execfile("./config/solver.params", solver_params)
@@ -180,6 +182,8 @@ if __name__ == '__main__':
     with open(os.path.join(output_folder, 'solver.prototxt'), 'w') as fp:
         print >> fp, solver
 
+    print "Created solver parameters file"
+
     # TEST NET
     if args.type == 'ResNet':
         res_params['phase'] = 'test'
@@ -192,6 +196,8 @@ if __name__ == '__main__':
     with open(os.path.join(output_folder, 'test.prototxt'), 'w') as fp:
         print >> fp, 'name: "' + name + '-test"'
         print >> fp, netspec.to_proto()
+
+    print "Created {} - test".format(name)
 
     # Create solver_score
     solver_params.update(
@@ -208,6 +214,8 @@ if __name__ == '__main__':
               'solver_score.prototxt'), 'w') as fp:
         print >> fp, solver
 
+    print "Created solver_score parameters file"
+
     # DEPLOY NET
     if args.type == 'ResNet':
         res_params['phase'] = 'deploy'
@@ -218,6 +226,8 @@ if __name__ == '__main__':
     with open(os.path.join(output_folder, 'deploy.prototxt'), 'w') as fp:
         print >> fp, 'name: "' + name + '-deploy"'
         print >> fp, netspec.to_proto()
+
+    print "Created {} - deploy".format(name)
 
     # Create train script
     with open(os.path.join(output_folder, 'train.sh'), 'w') as fp:
@@ -232,3 +242,6 @@ if __name__ == '__main__':
             ",".join(str(x) for x in args.gpu_list),
             os.path.join(output_folder, "train_$DATE.log")
             )
+
+    print "Created train script"
+    print "Model ready to train!"

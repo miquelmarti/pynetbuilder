@@ -396,7 +396,7 @@ class SSDExtraLayersLego(BaseLego):
         self._required = ['base_network']
         self._check_required_params(params)
         self.base_network = params['base_network']
-        if self.base_network == "Resnet":
+        if self.base_network == "ResNet":
             self._required.extend(['extra_blocks', 'extra_num_outputs',
                                    'main_branch', 'use_global_stats'])
             self._check_required_params(params)
@@ -404,6 +404,9 @@ class SSDExtraLayersLego(BaseLego):
             self.extra_num_outputs = params['extra_num_outputs']
             self.main_branch = params['main_branch']
             self.use_global_stats = params['use_global_stats']
+        else:
+            raise NotImplementedError("This type of base network"
+                                      "is not supported")
 
     def attach(self, netspec, bottom):
         from hybrid import ShortcutLego
@@ -411,34 +414,11 @@ class SSDExtraLayersLego(BaseLego):
 
         last = bottom
 
-        if self.base_network == "VGGnet":
-            for i in xrange(6, 9):
-                name = 'conv' + str(i) + '_1'
-                num_output = 256 if i == 6 else 128
-                params = dict(name=name, kernel_size=1, num_output=num_output,
-                              pad=0, stride=1)  # use_global_stats=True)
-                conv1 = BaseLegoFunction('Convolution', params).attach(
-                    netspec, last)
-                relu1 = BaseLegoFunction(
-                    'ReLU', dict(name=name + '_relu')).attach(netspec, [conv1])
+        if not len(self.extra_blocks) > 0:
+            print "No added extra layers for SSD"
+            return last
 
-                name = 'conv' + str(i) + '_2'
-                num_output = 512 if i == 6 else 2  # use_global_stats=True)56
-                params = dict(name=name, kernel_size=3, num_output=num_output,
-                              pad=1, stride=2)  # use_global_stats=True)
-                conv2 = BaseLegoFunction('Convolution', params).attach(
-                    netspec, [relu1])
-                last = BaseLegoFunction(
-                    'ReLU', dict(name=name + '_relu')).attach(netspec, [conv2])
-                last = [last]
-
-            # Add global pooling layer.
-            pool_param = dict(name='pool6', pool=P.Pooling.AVE,
-                              global_pooling=True)
-            last = BaseLegoFunction('Pooling', pool_param).attach(
-                netspec, last)
-
-        elif self.base_network == "Resnet":
+        if self.base_network == "ResNet":
 
             abc = 'abcdefghijklmnopqrstuvwxyz'
             for stage in range(len(self.extra_blocks)):
@@ -462,13 +442,13 @@ class SSDExtraLayersLego(BaseLego):
                     last = [last]
 
             # Add global pooling layer to last added layer.
-            if len(self.extra_blocks) > 0:
-                pool_param = dict(name='pool_last', pool=P.Pooling.AVE,
-                                  global_pooling=True)
-                last = BaseLegoFunction('Pooling', pool_param).attach(
-                    netspec, last)
+            pool_param = dict(name='pool_last', pool=P.Pooling.AVE,
+                              global_pooling=True)
+            last = BaseLegoFunction('Pooling', pool_param).attach(
+                netspec, last)
         else:
-            raise Exception('Base network unknown.',
-                            'Currently supported VGGnet and Resnet')
+            raise NotImplementedError("This type of base network"
+                                      "is not supported")
 
+        print "Added {} extra stages".format(len(self.extra_blocks))
         return last

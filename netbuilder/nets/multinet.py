@@ -46,18 +46,22 @@ def get_resnet_multi(params):
         data = DeployInputLego(data_params).attach(netspec)
         seg_label = None
         det_label = None
+        print "Created deploy phase data layer"
     elif data_layer == 'pascal':
         data_params = dict(phase=phase, list_file=source)
         data, seg_label, det_label = VOCSegDetDataLego(
             data_params).attach(netspec)
+        print "Created data layer for PascalVOC SegDet tasks"
     else:
-        raise Exception('Data layer selected not supported. Available: pascal')
+        raise NotImplementedError('Data layer selected not supported.'
+                                  'Available: pascal')
 
     # resnet base trunk
     resnet_params = dict(phase=phase, main_branch=main_branch,
                          num_output_stage1=num_output_stage1,
                          blocks=blocks)
     last = ResNetLego(resnet_params).attach(netspec, [data])
+    print "Created base network"
 
     if tasks in ['fcn', 'all']:
         # FCN branch
@@ -65,6 +69,7 @@ def get_resnet_multi(params):
                           num_classes=num_classes, phase=phase,
                           seg_label=seg_label, normalize=True)
         FCNAssembleLego(fcn_params).attach(netspec, [netspec[attach_layer]])
+        print "Attached FCN task"
     elif not phase == 'deploy':
         sil_params = dict(name='silence_seg_label', ntop=0)
         BaseLegoFunction('Silence', sil_params).attach(netspec, [seg_label])
@@ -72,7 +77,7 @@ def get_resnet_multi(params):
     # SSD branch
     if tasks in ['ssd', 'all']:
         use_global_stats = True
-        extrassd_params = dict(base_network='Resnet', main_branch=main_branch,
+        extrassd_params = dict(base_network='ResNet', main_branch=main_branch,
                                extra_blocks=extra_blocks,
                                extra_num_outputs=extra_num_outputs,
                                use_global_stats=use_global_stats)
@@ -104,6 +109,7 @@ def get_resnet_multi(params):
                                label_map_file=label_map_file,
                                name_size_file=name_size_file)
         MBoxAssembleLego(assemble_params).attach(netspec, [det_label])
+        print "Attached SSD task"
     elif not phase == 'deploy':
         sil_params = dict(name='silence_det_label', ntop=0)
         BaseLegoFunction('Silence', sil_params).attach(netspec, [det_label])
