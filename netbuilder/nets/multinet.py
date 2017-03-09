@@ -34,6 +34,7 @@ def get_resnet_multi(params):
     extra_blocks = params['extra_blocks']
     extra_num_outputs = params['extra_num_outputs']
     mbox_source_layers = params['mbox_source_layers']
+    min_dim = params['min_dim']
 
     tasks = params['tasks']
 
@@ -77,8 +78,6 @@ def get_resnet_multi(params):
                                use_global_stats=use_global_stats)
         extra_last = SSDExtraLayersLego(extrassd_params).attach(
             netspec, [netspec[attach_layer]])
-
-        min_dim = 300  # TODO: Parameter
 
         min_ratio = 20
         max_ratio = 90
