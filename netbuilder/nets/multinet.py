@@ -5,6 +5,8 @@
 import caffe
 from caffe import params as P
 
+import math
+
 
 def get_resnet_multi(params):
     from lego.data import VOCSegDetDataLego, DeployInputLego
@@ -12,8 +14,6 @@ def get_resnet_multi(params):
     from lego.fcn import FCNAssembleLego
     from lego.basenet import ResNetLego
     from lego.base import BaseLegoFunction
-
-    import math
 
     data_layer = params['data_layer']
     phase = params['phase']
