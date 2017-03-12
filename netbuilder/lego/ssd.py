@@ -224,9 +224,7 @@ class MBoxAssembleLego(BaseLego):
         label_map_file = self.params['label_map_file']
         name_size_file = self.params['name_size_file']
         output_directory = self.params['output_directory']
-
-        with open(name_size_file, 'r') as f:
-            num_test_image = len(f.readlines())
+        num_test_image = self.params['num_test_image']
 
         use_global_stats = False if phase == 'train' else True
 

@@ -23,6 +23,7 @@ def get_resnet_multi(params):
     name_size_file = params['name_size_file']
     source = params['data_dir']
     output_directory = params['test_out_dir']
+    num_test_image = params['num_test_image']
 
     main_branch = params['main_branch']
     num_output_stage1 = params['num_output_stage1']
@@ -107,7 +108,8 @@ def get_resnet_multi(params):
                                max_sizes=max_sizes, phase=phase,
                                output_directory=output_directory,
                                label_map_file=label_map_file,
-                               name_size_file=name_size_file)
+                               name_size_file=name_size_file,
+                               num_test_image=num_test_image)
         MBoxAssembleLego(assemble_params).attach(netspec, [det_label])
         print "Attached SSD task"
     elif not phase == 'deploy':
