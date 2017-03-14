@@ -330,16 +330,6 @@ class MBoxAssembleLego(BaseLego):
                                   propagate_down=[True, True, False, False])
                              ).attach(netspec, mbox_layers)
         else:
-            if phase == 'test':
-                mbox_layers.append(label)
-                BaseLegoFunction('MultiBoxLoss',
-                                 dict(name='mbox_loss',
-                                      multibox_loss_param=multibox_loss_param,
-                                      loss_param=loss_param,
-                                      propagate_down=[True, True,
-                                                      False, False])
-                                 ).attach(netspec, mbox_layers)
-
             # parameters for generating detection output.
             det_out_param = {
                 'num_classes': num_classes,
