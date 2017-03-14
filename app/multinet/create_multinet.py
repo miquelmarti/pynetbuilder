@@ -2,18 +2,13 @@
 @author Miquel Marti miquelmr@kth.se
 """
 
-import sys
+
 from argparse import ArgumentParser
 import os
 
-from caffe import layers as L
 from caffe import params as P
 from caffe.proto import caffe_pb2
 
-DATASETS_DIR = os.environ['DATASETS']
-sys.path.append('netbuilder')
-
-from tools.complexity import get_complexity
 from nets.multinet import get_resnet_multi
 
 parser = ArgumentParser(description="""
@@ -22,74 +17,79 @@ parser = ArgumentParser(description="""
     folder the train and test prototxt files with a custom data layer that
     gives labels for both tasks.
     """)
-parser.add_argument('-t', '--type', help="""'ResNet' only at the moment""")
+parser.add_argument('-t', '--type', help="""'ResNet' only at the moment""",
+                    default="ResNet")
 parser.add_argument('-o', '--output_folder', help="""Train and Test prototxt
-    will be generated as train.prototxt and test.prototxt""")
+    will be generated as train.prototxt and test.prototxt""",
+                    default="")
+parser.add_argument('--tasks', help="""Tasks to add: 'fcn', 'ssd', 'all' """,
+                    default="all")
 
 # Data params
 # TODO: Load arguments from config file instead
 parser.add_argument('-dl', '--data_layer', help="""Data layer to use""",
                     default="pascal")
-parser.add_argument('-d', '--data_dir_train',
-                    help="""Directory containing training data""",
-                    default=os.path.join(
-                        DATASETS_DIR,
-                        'VOCdevkit/VOC0712/lmdb/VOC0712_trainval_lmdb'))
-parser.add_argument('-D', '--data_dir_test',
-                    help="""Directory containing test data""",
-                    default=os.path.join(
-                        DATASETS_DIR,
-                        'VOCdevkit/VOC0712/lmdb/VOC0712_test_lmdb'))
+parser.add_argument('-d', '--data_dir_train', help="""Directory containing
+training data""", default="")
+parser.add_argument('-D', '--data_dir_test', help="""Directory containing
+test data""", default="")
+
+# Data params for SSD
 parser.add_argument('--label_map_file', help="""Label map file""",
-                    default=os.path.join(
-                        DATASETS_DIR,
-                        'VOCdevkit/VOC0712/labelmap_voc.prototxt'))
+                    default="")
 parser.add_argument('--name_size_file', help="""Name size file""",
-                    default=os.path.join(
-                        DATASETS_DIR,
-                        'VOCdevkit/VOC0712/test_name_size.txt'))
-parser.add_argument('--tasks', help="""Tasks to add: 'fcn', 'ssd', 'all' """,
-                    default="all")
+                    default="")
+parser.add_argument('--num_test_image', help="""Num test images""", type=int,
+                    default=0)
 
 # Train/test params
 parser.add_argument('-g', '--gpu_list',
                     help="""List of gpus to use, CPU if empty""",
-                    nargs="*", default=[0])
+                    nargs="*", default=[])
 parser.add_argument('-bs', '--batch_size', help="""Total batch size""",
                     type=int, default=32)
 parser.add_argument('--batch_size_per_device',
                     help="""Batch size per gpu""",
                     type=int, default=1)
 parser.add_argument('--test_out_dir', help="""Directory for test results""",
-                    default='')
+                    default='$WORK/test_results')
 parser.add_argument('--weights', help="""Weights file from which to start
     the training """, default='')
 
-# Resnet params
+# TODO: Add batchnorm options when batch size > 1
+
+# ResNet params
 parser.add_argument('-n', '--num_output_stage1', help="""Number of filters in
     stage 1 of resnet""", type=int, default=128)
 parser.add_argument('-b', '--blocks', type=int, nargs='+', help="""Number of
     Blocks in the 4 resnet stages""", default=[3, 4, 6, 3])
 parser.add_argument('-m', '--main_branch', help="""normal, bottleneck""",
-                    required=True)
+                    default='bottleneck')
 
 # FCN params
 parser.add_argument('--attach_layer',
-                    help="""Name of layer where FCN branch will be attached""")
-parser.add_argument('--skip_source_layer', nargs='+',
-                    help="""Name of layer(s) from which skip conenctions
-                    originate - Currently only works with one""")
+                    help="""Name of layer where FCN branch will be
+                    attached""", default='res5c_relu')
+parser.add_argument('--skip_source_layer', nargs='*',
+                    help="""Name of layer(s) from which skip connections
+                    originate - Currently only works with one""",
+                    default=['res4f_relu'])
 
 # SSD params
 parser.add_argument('--mbox_source_layers', nargs='+', help="""Names of layers
-    where detection heads will be attached""")
+    where detection heads will be attached""", default=['res3d_relu',
+                                                        'res4f_relu',
+                                                        'res5c_relu',
+                                                        'res6b_relu',
+                                                        'res7b_relu',
+                                                        'pool_last'])
 parser.add_argument('--extra_blocks', type=int, nargs='*', help="""Number of
-    extra Blocks to be attached to Detection network""", default=[3, 3])
-parser.add_argument('--extra_num_outputs', type=int, nargs='+', help="""Number
+    extra Blocks to be attached to Detection network""", default=[2, 2])
+parser.add_argument('--extra_num_outputs', type=int, nargs='*', help="""Number
     of outputs of extra blocks Detection network""", default=[1024, 1024])
 parser.add_argument('-c', '--num_classes', help="""Number of classes in
     detection dataset""", type=int, default=21)
-parser.add_argument('--min_dim', help="""Mininum dimension of input image""",
+parser.add_argument('--min_dim', help="""Minimum dimension of input image""",
                     type=int, default=300)
 
 
@@ -119,12 +119,21 @@ if __name__ == '__main__':
     print "Batch size x {} dev: ".format(num_gpus), args.batch_size_per_device
 
     # Count number of test images
-    with open(args.name_size_file, 'r') as f:
-        num_test_image = len(f.readlines())
+    if args.name_size_file is not "":
+        if os.path.exists(args.name_size_file):
+            with open(args.name_size_file, 'r') as f:
+                num_test_image = len(f.readlines())
+    elif args.num_test_image > 0:
+        num_test_image = args.num_test_image
+    else:
+        num_test_image = 0
+    if args.output_folder == "":
+        output_folder = os.path.expandvars("$HOME/data")
+    else:
+        output_folder = os.path.expandvars(args.output_folder)
 
-    output_folder = os.path.abspath(args.output_folder)
     # Create output directory if not existent, will overwrite previous content
-    if not os.path.exists(args.output_folder):
+    if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     if not os.path.exists(os.path.join(output_folder, 'snapshots')):
         os.makedirs(os.path.join(output_folder, 'snapshots'))
@@ -140,9 +149,12 @@ if __name__ == '__main__':
                       num_classes=args.num_classes,
                       skip_source_layer=args.skip_source_layer,
                       tasks=args.tasks,
-                      min_dim=args.min_dim)
+                      min_dim=args.min_dim,
+                      num_test_image=num_test_image)
 
     # TRAIN NET
+    if args.data_dir_train == "":
+        print "Warning! Data dir for train set not specified"
     if args.type == 'ResNet':
         res_params['phase'] = 'train'
         res_params['data_dir'] = args.data_dir_train
@@ -185,6 +197,8 @@ if __name__ == '__main__':
     print "Created solver parameters file"
 
     # TEST NET
+    if args.data_dir_test == "":
+        print "Warning! Data dir for test set not specified"
     if args.type == 'ResNet':
         res_params['phase'] = 'test'
         res_params['data_dir'] = args.data_dir_test
@@ -238,9 +252,14 @@ if __name__ == '__main__':
         if args.weights != '':
             print >> fp, '--weights="{}" \\'.format(os.path.abspath(
                 args.weights))
-        print >> fp, '--gpu {} 2>&1  | tee {}'.format(
-            ",".join(str(x) for x in args.gpu_list),
-            os.path.join(output_folder, "train_$DATE.log")
+        if len(args.gpu_list) > 0:
+            print >> fp, '--gpu {} 2>&1  | tee {}'.format(
+                ",".join(str(x) for x in args.gpu_list),
+                os.path.join(output_folder, "train_$DATE.log")
+                )
+        else:
+            print >> fp, ' 2>&1  | tee {}'.format(
+                os.path.join(output_folder, "train_$DATE.log")
             )
 
     print "Created train script"
