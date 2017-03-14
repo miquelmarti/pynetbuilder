@@ -18,22 +18,21 @@ class ResNetLego(BaseLego):
     '''
 
     def __init__(self, params):
+        self._required = ['phase', 'main_branch',
+                          'num_output_stage1', 'blocks', 'use_global_stats']
         self.phase = params['phase']
         self.main_branch = params['main_branch']
         self.num_output_stage1 = params['num_output_stage1']
         self.blocks = params['blocks']
-        self._required = ['phase', 'main_branch',
-                          'num_output_stage1', 'blocks']
+        self.use_global_stats = params['use_global_stats']
 
     def attach(self, netspec, bottom):
         from lego.hybrid import ConvBNReLULego, ShortcutLego
 
-        use_global_stats = True
-
         # Change default param for first conv layer
         Config.set_default_params('Convolution', 'bias_term', True)
         params = dict(name='conv1', num_output=64, kernel_size=7,
-                      use_global_stats=use_global_stats, pad=3, stride=2)
+                      use_global_stats=self.use_global_stats, pad=3, stride=2)
         stage1 = ConvBNReLULego(params).attach(netspec, bottom)
 
         # Restore default param
@@ -73,7 +72,8 @@ class ResNetLego(BaseLego):
                 curr_num_output = num_output * (2 ** (stage))
 
                 params = dict(name=name, num_output=curr_num_output,
-                              shortcut=shortcut, main_branch=self.main_branch,
-                              stride=stride, use_global_stats=use_global_stats)
+                              shortcut=shortcut, stride=stride,
+                              main_branch=self.main_branch,
+                              use_global_stats=self.use_global_stats)
                 last = ShortcutLego(params).attach(netspec, [last])
         return last

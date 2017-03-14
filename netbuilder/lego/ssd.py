@@ -396,13 +396,11 @@ class SSDExtraLayersLego(BaseLego):
         self.base_network = params['base_network']
         if self.base_network == "ResNet":
             self._required.extend(['extra_blocks', 'extra_num_outputs',
-                                   'main_branch', 'use_global_stats',
-                                   'use_bn'])
+                                   'main_branch', 'use_bn'])
             self._check_required_params(params)
             self.extra_blocks = params['extra_blocks']
             self.extra_num_outputs = params['extra_num_outputs']
             self.main_branch = params['main_branch']
-            self.use_global_stats = params['use_global_stats']
             self.use_bn = params['use_bn']
         else:
             raise NotImplementedError("This type of base network"
@@ -440,7 +438,7 @@ class SSDExtraLayersLego(BaseLego):
                                   shortcut=shortcut,
                                   main_branch=self.main_branch,
                                   stride=stride, filter_mult=None,
-                                  use_global_stats=self.use_global_stats)
+                                  use_global_stats=False)
                     if self.use_bn:
                         last = ShortcutLego(params).attach(netspec, last)
                     else:

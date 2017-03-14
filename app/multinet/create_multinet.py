@@ -11,12 +11,16 @@ from caffe.proto import caffe_pb2
 
 from nets.multinet import get_resnet_multi
 
+
+# TODO: Load arguments from config file instead
+
 parser = ArgumentParser(description="""
     This script generates multi-task networks for Object detection and
     Segmentation based on different base networks. Writes to the selected
     folder the train and test prototxt files with a custom data layer that
     gives labels for both tasks.
     """)
+
 parser.add_argument('-t', '--type', help="""'ResNet' only at the moment""",
                     default="ResNet")
 parser.add_argument('-o', '--output_folder', help="""Train and Test prototxt
@@ -26,7 +30,6 @@ parser.add_argument('--tasks', help="""Tasks to add: 'fcn', 'ssd', 'all' """,
                     default="all")
 
 # Data params
-# TODO: Load arguments from config file instead
 parser.add_argument('-dl', '--data_layer', help="""Data layer to use""",
                     default="pascal")
 parser.add_argument('-d', '--data_dir_train', help="""Directory containing
@@ -41,6 +44,8 @@ parser.add_argument('--name_size_file', help="""Name size file""",
                     default="")
 parser.add_argument('--num_test_image', help="""Num test images""", type=int,
                     default=0)
+parser.add_argument('--min_dim', help="""Minimum dimension of input image""",
+                    type=int, default=300)
 
 # Train/test params
 parser.add_argument('-g', '--gpu_list',
@@ -56,7 +61,12 @@ parser.add_argument('--test_out_dir', help="""Directory for test results""",
 parser.add_argument('--weights', help="""Weights file from which to start
     the training """, default='')
 
-# TODO: Add batchnorm options when batch size > 1
+parser.add_argument('--use_batchnorm', help="""Use Batch Normalization,
+    if specified `use_global_stats` will be False so the batch statistics will
+    be updated during training and the newly added blocks will include
+    BatchNorm layers, otherwise the original BatchNorm layers will be kept but
+    will use the previous statistics. Only makes sense when the batch size per
+    device is greater than one.""", action='store_true')
 
 # ResNet params
 parser.add_argument('-n', '--num_output_stage1', help="""Number of filters in
@@ -89,8 +99,6 @@ parser.add_argument('--extra_num_outputs', type=int, nargs='*', help="""Number
     of outputs of extra blocks Detection network""", default=[1024, 1024])
 parser.add_argument('-c', '--num_classes', help="""Number of classes in
     detection dataset""", type=int, default=21)
-parser.add_argument('--min_dim', help="""Minimum dimension of input image""",
-                    type=int, default=300)
 
 
 if __name__ == '__main__':
@@ -103,7 +111,10 @@ if __name__ == '__main__':
         n_layers = sum(map(lambda x: x*layers_x_block, args.blocks)) + 2
     else:
         raise NotImplementedError("This type of base network is not supported")
-    print "Creating", args.type, n_layers, "with", args.tasks
+
+    print ""
+    print "Creating", args.type, n_layers, "with", args.tasks.upper()
+    print ""
 
     num_gpus = len(args.gpu_list)
     if num_gpus > 0:
@@ -113,10 +124,14 @@ if __name__ == '__main__':
         num_gpus = 1
     iter_size = args.batch_size / (args.batch_size_per_device *
                                    num_gpus)
+
+    print "======================="
+    print "Using ", "GPU" if solver_mode else "CPU"
     print "Accum batch size: ", (iter_size * num_gpus *
                                  args.batch_size_per_device)
     print "Iteration size: ", iter_size
     print "Batch size x {} dev: ".format(num_gpus), args.batch_size_per_device
+    print "=======================\n"
 
     # Count number of test images
     if args.name_size_file is not "":
@@ -150,7 +165,8 @@ if __name__ == '__main__':
                       skip_source_layer=args.skip_source_layer,
                       tasks=args.tasks,
                       min_dim=args.min_dim,
-                      num_test_image=num_test_image)
+                      num_test_image=num_test_image,
+                      use_batchnorm=args.use_batchnorm)
 
     # TRAIN NET
     if args.data_dir_train == "":
@@ -263,4 +279,7 @@ if __name__ == '__main__':
             )
 
     print "Created train script"
+
+    print ""
     print "Model ready to train!"
+    print ""

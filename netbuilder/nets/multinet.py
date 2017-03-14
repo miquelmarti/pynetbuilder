@@ -30,6 +30,8 @@ def get_resnet_multi(params):
     blocks = params['blocks']
     attach_layer = params['attach_layer']
 
+    use_batchnorm = params['use_batchnorm']
+
     skip_source_layer = params['skip_source_layer']
 
     extra_blocks = params['extra_blocks']
@@ -49,7 +51,9 @@ def get_resnet_multi(params):
         det_label = None
         print "Created deploy phase data layer"
     elif data_layer == 'pascal':
-        data_params = dict(phase=phase, list_file=source)
+        data_params = dict(phase=phase, list_file=source,
+                           batch_size=batch_size_per_device,
+                           resize_dim=min_dim)
         data, seg_label, det_label = VOCSegDetDataLego(
             data_params).attach(netspec)
         print "Created data layer for PascalVOC SegDet tasks"
@@ -58,9 +62,10 @@ def get_resnet_multi(params):
                                   'Available: pascal')
 
     # resnet base trunk
+    use_global_stats = not use_batchnorm
     resnet_params = dict(phase=phase, main_branch=main_branch,
                          num_output_stage1=num_output_stage1,
-                         blocks=blocks)
+                         blocks=blocks, use_global_stats=use_global_stats)
     last = ResNetLego(resnet_params).attach(netspec, [data])
     print "Created base network"
 
@@ -77,13 +82,10 @@ def get_resnet_multi(params):
 
     # SSD branch
     if tasks in ['ssd', 'all']:
-        use_global_stats = True
-        use_bn = False if batch_size_per_device == 1 else True
         extrassd_params = dict(base_network='ResNet', main_branch=main_branch,
                                extra_blocks=extra_blocks,
                                extra_num_outputs=extra_num_outputs,
-                               use_global_stats=use_global_stats,
-                               use_bn=use_bn)
+                               use_bn=use_batchnorm)
         extra_last = SSDExtraLayersLego(extrassd_params).attach(
             netspec, [netspec[attach_layer]])
 

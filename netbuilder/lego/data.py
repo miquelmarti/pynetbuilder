@@ -300,9 +300,15 @@ class VOCSegDetDataLego(BaseLego):
     def __init__(self, params):
         self._required = ['list_file']
         self._check_required_params(params)
+        batch_size = params['batch_size']
+        if batch_size > 1:
+            resize_dim = params['resize_dim']
+        else:
+            resize_dim = None
         self.pydata_params = dict(list_file=params['list_file'],
                                   mean=(104, 117, 123),
-                                  seed=1337)
+                                  seed=1337, batch_size=batch_size,
+                                  resize_dim=resize_dim)
         self.pylayer = 'VOCSegDetDataLayer'
 
     def attach(self, netspec):
