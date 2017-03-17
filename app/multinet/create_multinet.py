@@ -77,7 +77,7 @@ parser.add_argument('-bn', '--use_batchnorm', help="""Use Batch Normalization,
 
 # ResNet params
 parser.add_argument('-n', '--num_output_stage1', help="""Number of filters in
-    stage 1 of resnet""", type=int, default=128)
+    stage 1 of resnet""", type=int, default=256)
 parser.add_argument('-b', '--blocks', type=int, nargs='+', help="""Number of
     Blocks in the 4 resnet stages""", default=[3, 4, 6, 3])
 parser.add_argument('-m', '--main_branch', help="""normal, bottleneck""",
