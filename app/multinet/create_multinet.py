@@ -13,6 +13,7 @@ from nets.multinet import get_resnet_multi
 
 from settings import PROJECT_ROOT
 
+
 def expand(path):
     return os.path.expandvars(os.path.expanduser(path))
 
@@ -22,13 +23,12 @@ parser = ArgumentParser(description="""
     This script generates multi-task networks for Object detection and
     Segmentation based on different base networks. Writes to the selected
     folder the train and test prototxt files with a custom data layer that
-    gives labels for both tasks.
-    """)
+    gives labels for both tasks. Default: fcn+ssd Resnet 50""")
 
 parser.add_argument('-t', '--type', help="""'ResNet' only at the moment""",
                     default="ResNet")
 parser.add_argument('-o', '--output_folder', help="""Train and Test prototxt
-    will be generated as train.prototxt and test.prototxt""",
+                    will be generated as train.prototxt and test.prototxt""",
                     default="")
 parser.add_argument('--tasks', help="""Tasks to add: 'fcn', 'ssd', 'all' """,
                     default="all")
@@ -37,9 +37,15 @@ parser.add_argument('--tasks', help="""Tasks to add: 'fcn', 'ssd', 'all' """,
 parser.add_argument('-dl', '--data_layer', help="""Data layer to use""",
                     default="pascal")
 parser.add_argument('-d', '--data_dir_train', help="""Directory containing
-training data""", default="")
+                    training data""", default="")
 parser.add_argument('-D', '--data_dir_test', help="""Directory containing
-test data""", default="")
+                    test data""", default="")
+parser.add_argument('--n_cores', help="""Number of cores for use in data
+                    layer""", type=int, default=4)
+parser.add_argument('--no_prefetch', help="""Use prefetching in a separate
+                    thread""", action='store_true')
+parser.add_argument('--no_parallel', help="""Parallelize the data ingestion""",
+                    action='store_true')
 
 # Data params for SSD
 parser.add_argument('--label_map_file', help="""Label map file""",
@@ -50,8 +56,6 @@ parser.add_argument('--num_test_image', help="""Num test images""", type=int,
                     default=0)
 parser.add_argument('--min_dim', help="""Minimum dimension of input image""",
                     type=int, default=300)
-parser.add_argument('--num_cores', help="""Number of cores for use in data
-    layer""", type=int, default=4)
 
 # Train/test params
 parser.add_argument('-g', '--gpu_list',
@@ -59,7 +63,7 @@ parser.add_argument('-g', '--gpu_list',
                     nargs="*", default=[])
 parser.add_argument('-bs', '--batch_size', help="""Total batch size""",
                     type=int, default=32)
-parser.add_argument('-bst', '--batch_size_test', help="""Total batch size""",
+parser.add_argument('-bst', '--batch_size_test', help="""Test batch size""",
                     type=int, default=1)
 parser.add_argument('-bsd', '--batch_size_per_device',
                     help="""Batch size per gpu""", type=int, default=8)
@@ -94,18 +98,21 @@ parser.add_argument('--skip_source_layer', nargs='*',
 
 # SSD params
 parser.add_argument('--mbox_source_layers', nargs='+', help="""Names of layers
-    where detection heads will be attached""", default=['res3d_relu',
-                                                        'res4f_relu',
-                                                        'res5c_relu',
-                                                        'res6b_relu',
-                                                        'res7b_relu',
-                                                        'pool_last'])
+                    where detection heads will be attached""",
+                    default=['res3d_relu',
+                             'res4f_relu',
+                             'res5c_relu',
+                             'res6b_relu',
+                             'res7b_relu',
+                             'pool_last'])
 parser.add_argument('--extra_blocks', type=int, nargs='*', help="""Number of
-    extra Blocks to be attached to Detection network""", default=[2, 2])
+                    extra Blocks to be attached to Detection network""",
+                    default=[2, 2])
 parser.add_argument('--extra_num_outputs', type=int, nargs='*', help="""Number
-    of outputs of extra blocks Detection network""", default=[1024, 1024])
+                    of outputs of extra blocks Detection network""",
+                    default=[1024, 1024])
 parser.add_argument('-c', '--num_classes', help="""Number of classes in
-    detection dataset""", type=int, default=21)
+                    detection dataset""", type=int, default=21)
 
 
 if __name__ == '__main__':
@@ -139,8 +146,11 @@ if __name__ == '__main__':
                                  args.batch_size_per_device)
     print "Iteration size: ", iter_size
     print "Batch size x {} dev: ".format(num_gpus), args.batch_size_per_device
+    print "======================="
+    print "Parameters:"
+    for param in args.__dict__.items():
+        print "    ", param[0], param[1]
     print "=======================\n"
-
     # Count number of test images
     name_size_file = expand(args.name_size_file)
     if name_size_file is not "":
@@ -161,8 +171,8 @@ if __name__ == '__main__':
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     else:
-        overwrite = raw_input("Output folder exists, overwrite? (y): ")
-        assert(overwrite == "y")
+        overwrite = raw_input("Output folder exists, overwrite? (Y/n): ")
+        assert(overwrite == "y" or overwrite == "")
     if not os.path.exists(os.path.join(output_folder, 'snapshots')):
         os.makedirs(os.path.join(output_folder, 'snapshots'))
 
@@ -179,7 +189,10 @@ if __name__ == '__main__':
                       tasks=args.tasks,
                       min_dim=args.min_dim,
                       num_test_image=num_test_image,
-                      use_batchnorm=args.use_batchnorm)
+                      use_batchnorm=args.use_batchnorm,
+                      n_cores=args.n_cores,
+                      do_prefetch=not args.no_prefetch,
+                      do_parallel=not args.no_parallel)
 
     # TRAIN NET
     if args.data_dir_train == "":

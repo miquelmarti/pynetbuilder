@@ -24,6 +24,9 @@ def get_resnet_multi(params):
     source = params['data_dir']
     output_directory = params['test_out_dir']
     num_test_image = params['num_test_image']
+    n_cores = params['n_cores']
+    do_prefetch = params['do_prefetch']
+    do_parallel = params['do_parallel']
 
     main_branch = params['main_branch']
     num_output_stage1 = params['num_output_stage1']
@@ -45,7 +48,7 @@ def get_resnet_multi(params):
 
     # data layer
     if phase == 'deploy':
-        data_params = dict(size=500)
+        data_params = dict(size=min_dim)
         data = DeployInputLego(data_params).attach(netspec)
         seg_label = None
         det_label = None
@@ -53,7 +56,8 @@ def get_resnet_multi(params):
     elif data_layer == 'pascal':
         data_params = dict(phase=phase, list_file=source,
                            batch_size=batch_size_per_device,
-                           resize_dim=min_dim)
+                           resize_dim=min_dim, n_cores=n_cores,
+                           do_parallel=do_parallel, do_prefetch=do_prefetch)
         data, seg_label, det_label = VOCSegDetDataLego(
             data_params).attach(netspec)
         print "Created data layer for PascalVOC SegDet tasks"
@@ -89,12 +93,15 @@ def get_resnet_multi(params):
         extra_last = SSDExtraLayersLego(extrassd_params).attach(
             netspec, [netspec[attach_layer]])
 
+        # TODO: Parametrize this values
         min_ratio = 20
         max_ratio = 90
         step = int(math.floor((max_ratio - min_ratio) /
                               (len(mbox_source_layers) - 2)))
         min_sizes = []
         max_sizes = []
+        if min_dim is None:
+            min_dim = 300
         for ratio in xrange(min_ratio, max_ratio + 1, step):
             min_sizes.append(min_dim * ratio / 100.)
             max_sizes.append(min_dim * (ratio + step) / 100.)

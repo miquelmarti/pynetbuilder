@@ -14,6 +14,7 @@ from caffe import layers as L
 from caffe import params as P
 import caffe
 
+from copy import deepcopy
 
 class ConfigDataLego(BaseLego):
     '''
@@ -298,17 +299,17 @@ class VOCSegDetDataLego(BaseLego):
     '''
 
     def __init__(self, params):
-        self._required = ['list_file']
+        self._required = ['list_file', 'batch_size']
         self._check_required_params(params)
         batch_size = params['batch_size']
         if batch_size > 1:
+            self._required.append('resize_dim')
+            self._check_required_params(params)
             resize_dim = params['resize_dim']
         else:
             resize_dim = None
-        self.pydata_params = dict(list_file=params['list_file'],
-                                  mean=(104, 117, 123),
-                                  seed=1337, batch_size=batch_size,
-                                  resize_dim=resize_dim)
+        self.pydata_params = deepcopy(params)
+        self.pydata_params.update(dict(mean=(104, 117, 123), seed=1337))
         self.pylayer = 'VOCSegDetDataLayer'
 
     def attach(self, netspec):
