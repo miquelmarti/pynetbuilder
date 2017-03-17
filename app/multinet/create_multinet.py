@@ -11,9 +11,13 @@ from caffe.proto import caffe_pb2
 
 from nets.multinet import get_resnet_multi
 
+from settings import PROJECT_ROOT
+
+def expand(path):
+    return os.path.expandvars(os.path.expanduser(path))
+
 
 # TODO: Load arguments from config file instead
-
 parser = ArgumentParser(description="""
     This script generates multi-task networks for Object detection and
     Segmentation based on different base networks. Writes to the selected
@@ -46,6 +50,8 @@ parser.add_argument('--num_test_image', help="""Num test images""", type=int,
                     default=0)
 parser.add_argument('--min_dim', help="""Minimum dimension of input image""",
                     type=int, default=300)
+parser.add_argument('--num_cores', help="""Number of cores for use in data
+    layer""", type=int, default=4)
 
 # Train/test params
 parser.add_argument('-g', '--gpu_list',
@@ -53,15 +59,16 @@ parser.add_argument('-g', '--gpu_list',
                     nargs="*", default=[])
 parser.add_argument('-bs', '--batch_size', help="""Total batch size""",
                     type=int, default=32)
-parser.add_argument('--batch_size_per_device',
-                    help="""Batch size per gpu""",
+parser.add_argument('-bst', '--batch_size_test', help="""Total batch size""",
                     type=int, default=1)
+parser.add_argument('-bsd', '--batch_size_per_device',
+                    help="""Batch size per gpu""", type=int, default=8)
 parser.add_argument('--test_out_dir', help="""Directory for test results""",
-                    default='$WORK/test_results')
+                    default='')
 parser.add_argument('--weights', help="""Weights file from which to start
     the training """, default='')
 
-parser.add_argument('--use_batchnorm', help="""Use Batch Normalization,
+parser.add_argument('-bn', '--use_batchnorm', help="""Use Batch Normalization,
     if specified `use_global_stats` will be False so the batch statistics will
     be updated during training and the newly added blocks will include
     BatchNorm layers, otherwise the original BatchNorm layers will be kept but
@@ -102,6 +109,7 @@ parser.add_argument('-c', '--num_classes', help="""Number of classes in
 
 
 if __name__ == '__main__':
+    os.chdir(PROJECT_ROOT)
 
     args = parser.parse_args()
 
@@ -134,22 +142,27 @@ if __name__ == '__main__':
     print "=======================\n"
 
     # Count number of test images
-    if args.name_size_file is not "":
-        if os.path.exists(args.name_size_file):
-            with open(args.name_size_file, 'r') as f:
+    name_size_file = expand(args.name_size_file)
+    if name_size_file is not "":
+        if os.path.exists(name_size_file):
+            with open(name_size_file, 'r') as f:
                 num_test_image = len(f.readlines())
     elif args.num_test_image > 0:
         num_test_image = args.num_test_image
     else:
         num_test_image = 0
+
     if args.output_folder == "":
-        output_folder = os.path.expandvars("$HOME/data")
+        output_folder = expand("$HOME/data")
     else:
-        output_folder = os.path.expandvars(args.output_folder)
+        output_folder = expand(args.output_folder)
 
     # Create output directory if not existent, will overwrite previous content
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
+    else:
+        overwrite = raw_input("Output folder exists, overwrite? (y): ")
+        assert(overwrite == "y")
     if not os.path.exists(os.path.join(output_folder, 'snapshots')):
         os.makedirs(os.path.join(output_folder, 'snapshots'))
 
@@ -173,11 +186,11 @@ if __name__ == '__main__':
         print "Warning! Data dir for train set not specified"
     if args.type == 'ResNet':
         res_params['phase'] = 'train'
-        res_params['data_dir'] = args.data_dir_train
+        res_params['data_dir'] = expand(args.data_dir_train)
         res_params['batch_size_per_device'] = args.batch_size_per_device
-        res_params['label_map_file'] = args.label_map_file
-        res_params['name_size_file'] = args.name_size_file
-        res_params['test_out_dir'] = args.test_out_dir
+        res_params['label_map_file'] = expand(args.label_map_file)
+        res_params['name_size_file'] = name_size_file
+        res_params['test_out_dir'] = expand(args.test_out_dir)
         netspec = get_resnet_multi(res_params)
         name = 'multiResnet'+str(n_layers)
     else:
@@ -217,8 +230,8 @@ if __name__ == '__main__':
         print "Warning! Data dir for test set not specified"
     if args.type == 'ResNet':
         res_params['phase'] = 'test'
-        res_params['data_dir'] = args.data_dir_test
-        res_params['batch_size_per_device'] = 1
+        res_params['data_dir'] = expand(args.data_dir_test)
+        res_params['batch_size_per_device'] = args.batch_size_test
         netspec = get_resnet_multi(res_params)
     else:
         raise NotImplementedError("This type of base network is not supported")
@@ -266,8 +279,12 @@ if __name__ == '__main__':
         print >> fp, '--solver="{}" \\'.format(
             os.path.join(output_folder, 'solver.prototxt'))
         if args.weights != '':
-            print >> fp, '--weights="{}" \\'.format(os.path.abspath(
-                args.weights))
+            if ".solverstate" in args.weights:
+                print >> fp, '--snapshot="{}" \\'.format(expand(args.weights))
+            elif ".caffemodel" in args.weights:
+                print >> fp, '--weights="{}" \\'.format(expand(args.weights))
+            else:
+                raise Exception("File format for weights not recognized")
         if len(args.gpu_list) > 0:
             print >> fp, '--gpu {} 2>&1  | tee {}'.format(
                 ",".join(str(x) for x in args.gpu_list),
