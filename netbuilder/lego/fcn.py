@@ -11,6 +11,7 @@ from base import BaseLego
 from base import BaseLegoFunction
 from base import Config
 
+from caffe import layers as L
 from caffe import params as P
 import caffe
 from copy import deepcopy
@@ -38,13 +39,14 @@ class FCNAssembleLego(BaseLego):
 
     def __init__(self, params):
         self._required = ['skip_source_layer', 'num_classes',
-                          'seg_label', 'normalize', 'phase']
+                          'seg_label', 'normalize', 'phase', 'num_test_image']
         self._check_required_params(params)
         self.skip_source_layer = params['skip_source_layer']
         self.num_classes = params['num_classes']
         self.seg_label = params['seg_label']
         self.normalize = params['normalize']
         self.phase = params['phase']
+        self.num_test_image = params['num_test_image']
 
     def attach(self, netspec, bottom):
         # Change default params
@@ -106,6 +108,12 @@ class FCNAssembleLego(BaseLego):
                               )
             last = BaseLegoFunction('SoftmaxWithLoss', loss_param).attach(
                 netspec, [scores, self.seg_label])
+            if self.phase == 'test':
+                seg_score_params = dict(num_test_image=self.num_test_image)
+                last = SegScoreLayer(seg_score_params).attach(netspec,
+                                                              [scores,
+                                                               self.seg_label,
+                                                               last])
         else:
             softmax_param = dict(name='softmax')
             last = BaseLegoFunction('Softmax', softmax_param).attach(
@@ -116,3 +124,26 @@ class FCNAssembleLego(BaseLego):
                                   False)
 
         return last
+
+
+class SegScoreLayer(BaseLego):
+    '''
+    Lego for using the python layers from
+    https://github.com/miquelmarti/Multitask4RT that implement the scoring
+    functionality of https://github.com/shelhamer/fcn.berkeleyvision.org
+    score.py script.
+    Needs to be in the python path.
+    '''
+
+    def __init__(self, params):
+        self._required = ['num_test_image']
+        self._check_required_params(params)
+        self.pydata_params = dict(test_iters=params['num_test_image'])
+        self.pylayer = 'SegScoreLayer'
+        self.module = 'seg_score_layer'
+
+    def attach(self, netspec, bottom):
+        python_param = dict(module=self.module, layer=self.pylayer,
+                            param_str=str(self.pydata_params))
+        netspec.seg_scores = L.Python(bottom[0], bottom[1], bottom[2],
+                     python_param=python_param,  ntop=0)

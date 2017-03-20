@@ -68,7 +68,8 @@ def get_resnet_multi(params):
         # FCN branch
         fcn_params = dict(skip_source_layer=skip_source_layer,
                           num_classes=num_classes, phase=phase,
-                          seg_label=seg_label, normalize=True)
+                          seg_label=seg_label, normalize=True,
+                          num_test_image=num_test_image)
         FCNAssembleLego(fcn_params).attach(netspec, [netspec[attach_layer]])
         print "Attached FCN task"
     elif not phase == 'deploy':
