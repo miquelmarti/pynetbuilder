@@ -99,7 +99,7 @@ def get_resnet_multi(params):
         max_sizes = [min_dim * 20 / 100.] + max_sizes
         steps = [8, 16, 32, 64, 100, 300]
         aspect_ratios = [[2], [2, 3], [2, 3], [2, 3], [2], [2]]
-        normalizations = [20, -1, -1, -1, -1, -1]
+        normalizations = [20, 20, 20, -1, -1, -1]
 
         assemble_params = dict(mbox_source_layers=mbox_source_layers,
                                normalizations=normalizations,
