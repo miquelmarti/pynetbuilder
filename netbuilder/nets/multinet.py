@@ -24,11 +24,16 @@ def get_resnet_multi(params):
     source = params['data_dir']
     output_directory = params['test_out_dir']
     num_test_image = params['num_test_image']
+    n_cores = params['n_cores']
+    do_prefetch = params['do_prefetch']
+    do_parallel = params['do_parallel']
 
     main_branch = params['main_branch']
     num_output_stage1 = params['num_output_stage1']
     blocks = params['blocks']
     attach_layer = params['attach_layer']
+
+    use_batchnorm = params['use_batchnorm']
 
     skip_source_layer = params['skip_source_layer']
 
@@ -43,13 +48,16 @@ def get_resnet_multi(params):
 
     # data layer
     if phase == 'deploy':
-        data_params = dict(size=500)
+        data_params = dict(size=min_dim)
         data = DeployInputLego(data_params).attach(netspec)
         seg_label = None
         det_label = None
         print "Created deploy phase data layer"
     elif data_layer == 'pascal':
-        data_params = dict(phase=phase, list_file=source)
+        data_params = dict(phase=phase, list_file=source,
+                           batch_size=batch_size_per_device,
+                           resize_dim=min_dim, n_cores=n_cores,
+                           do_parallel=do_parallel, do_prefetch=do_prefetch)
         data, seg_label, det_label = VOCSegDetDataLego(
             data_params).attach(netspec)
         print "Created data layer for PascalVOC SegDet tasks"
@@ -58,9 +66,10 @@ def get_resnet_multi(params):
                                   'Available: pascal')
 
     # resnet base trunk
+    use_global_stats = not use_batchnorm
     resnet_params = dict(phase=phase, main_branch=main_branch,
                          num_output_stage1=num_output_stage1,
-                         blocks=blocks)
+                         blocks=blocks, use_global_stats=use_global_stats)
     last = ResNetLego(resnet_params).attach(netspec, [data])
     print "Created base network"
 
@@ -78,20 +87,22 @@ def get_resnet_multi(params):
 
     # SSD branch
     if tasks in ['ssd', 'all']:
-        use_global_stats = True
         extrassd_params = dict(base_network='ResNet', main_branch=main_branch,
                                extra_blocks=extra_blocks,
                                extra_num_outputs=extra_num_outputs,
-                               use_global_stats=use_global_stats)
+                               use_bn=use_batchnorm)
         extra_last = SSDExtraLayersLego(extrassd_params).attach(
             netspec, [netspec[attach_layer]])
 
+        # TODO: Parametrize this values
         min_ratio = 20
         max_ratio = 90
         step = int(math.floor((max_ratio - min_ratio) /
                               (len(mbox_source_layers) - 2)))
         min_sizes = []
         max_sizes = []
+        if min_dim is None:
+            min_dim = 300
         for ratio in xrange(min_ratio, max_ratio + 1, step):
             min_sizes.append(min_dim * ratio / 100.)
             max_sizes.append(min_dim * (ratio + step) / 100.)

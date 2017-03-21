@@ -50,8 +50,8 @@ class ConvReLULego(BaseLego):
         self._required = ['name', 'kernel_size', 'num_output', 'pad', 'stride']
         self._check_required_params(params)
         self.convParams = deepcopy(params)
-        self.convParams['name'] = 'conv' + params['name']
-        self.reluParams = dict(name='relu' + params['name'])
+        self.convParams['name'] = params['name']
+        self.reluParams = dict(name=params['name'] + '_relu')
 
     def attach(self, netspec, bottom):
         conv = BaseLegoFunction('Convolution', self.convParams).attach(netspec, bottom)
@@ -291,6 +291,13 @@ class ShortcutLego(BaseLego):
                                  kernel_size=1, pad=0, stride=self.stride,
                                  use_global_stats=self.use_global_stats)
             shortcut = ConvBNLego(shortcut_params).attach(netspec, bottom)
+        elif self.shortcut == 'noBN_projection':
+            name = self.name + '_branch1'
+            num_output = self.num_output
+            shortcut_params = dict(name=name , num_output=num_output,
+                                 kernel_size=1, pad=0, stride=self.stride)
+            shortcut = BaseLegoFunction('Convolution', shortcut_params).attach(
+                netspec, bottom)
 
             # Convolution(kernel_w=3,kernel_h=1,num_output=64,pad_w=1)+BatchNorm+Scale+ReLU+
             # Convolution(kernel_w=1,kernel_h=3,num_output=64,pad_h=1)+BatchNorm+Scale+ReLU
@@ -370,6 +377,24 @@ class ShortcutLego(BaseLego):
                                  kernel_size=1, pad=0, stride=1,
                                  use_global_stats=self.use_global_stats)
             br2_out = ConvBNLego(br2c_params).attach(netspec, [br2b])
+
+        if self.main_branch == 'noBN_bottleneck':
+            name = self.name + '_branch2a'
+            num_output = self.num_output
+            br2a_params = dict(name=name, num_output=num_output / 4,
+                                 kernel_size=1, pad=0, stride=self.stride)
+            br2a = ConvReLULego(br2a_params).attach(netspec, bottom)
+
+            name = self.name + '_branch2b'
+            br2b_params = dict(name=name, num_output=num_output / 4,
+                                 kernel_size=3, pad=1, stride=1)
+            br2b = ConvReLULego(br2b_params).attach(netspec, [br2a])
+
+            name = self.name + '_branch2c'
+            br2c_params = dict(name=name, num_output=num_output,
+                                 kernel_size=1, pad=0, stride=1)
+            br2_out = BaseLegoFunction('Convolution', br2c_params).attach(
+                netspec, [br2b])
 
         elif self.main_branch == 'inception':
             name = self.name + '_inception'

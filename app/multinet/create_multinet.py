@@ -11,28 +11,41 @@ from caffe.proto import caffe_pb2
 
 from nets.multinet import get_resnet_multi
 
+from settings import PROJECT_ROOT
+
+
+def expand(path):
+    return os.path.expandvars(os.path.expanduser(path))
+
+
+# TODO: Load arguments from config file instead
 parser = ArgumentParser(description="""
     This script generates multi-task networks for Object detection and
     Segmentation based on different base networks. Writes to the selected
     folder the train and test prototxt files with a custom data layer that
-    gives labels for both tasks.
-    """)
+    gives labels for both tasks. Default: fcn+ssd Resnet 50""")
+
 parser.add_argument('-t', '--type', help="""'ResNet' only at the moment""",
                     default="ResNet")
 parser.add_argument('-o', '--output_folder', help="""Train and Test prototxt
-    will be generated as train.prototxt and test.prototxt""",
+                    will be generated as train.prototxt and test.prototxt""",
                     default="")
 parser.add_argument('--tasks', help="""Tasks to add: 'fcn', 'ssd', 'all' """,
                     default="all")
 
 # Data params
-# TODO: Load arguments from config file instead
 parser.add_argument('-dl', '--data_layer', help="""Data layer to use""",
                     default="pascal")
 parser.add_argument('-d', '--data_dir_train', help="""Directory containing
-training data""", default="")
+                    training data""", default="")
 parser.add_argument('-D', '--data_dir_test', help="""Directory containing
-test data""", default="")
+                    test data""", default="")
+parser.add_argument('--n_cores', help="""Number of cores for use in data
+                    layer""", type=int, default=4)
+parser.add_argument('--no_prefetch', help="""Use prefetching in a separate
+                    thread""", action='store_true')
+parser.add_argument('--no_parallel', help="""Parallelize the data ingestion""",
+                    action='store_true')
 
 # Data params for SSD
 parser.add_argument('--label_map_file', help="""Label map file""",
@@ -41,6 +54,8 @@ parser.add_argument('--name_size_file', help="""Name size file""",
                     default="")
 parser.add_argument('--num_test_image', help="""Num test images""", type=int,
                     default=0)
+parser.add_argument('--min_dim', help="""Minimum dimension of input image""",
+                    type=int, default=300)
 
 # Train/test params
 parser.add_argument('-g', '--gpu_list',
@@ -48,19 +63,25 @@ parser.add_argument('-g', '--gpu_list',
                     nargs="*", default=[])
 parser.add_argument('-bs', '--batch_size', help="""Total batch size""",
                     type=int, default=32)
-parser.add_argument('--batch_size_per_device',
-                    help="""Batch size per gpu""",
+parser.add_argument('-bst', '--batch_size_test', help="""Test batch size""",
                     type=int, default=1)
+parser.add_argument('-bsd', '--batch_size_per_device',
+                    help="""Batch size per gpu""", type=int, default=8)
 parser.add_argument('--test_out_dir', help="""Directory for test results""",
-                    default='$WORK/test_results')
+                    default='')
 parser.add_argument('--weights', help="""Weights file from which to start
     the training """, default='')
 
-# TODO: Add batchnorm options when batch size > 1
+parser.add_argument('-bn', '--use_batchnorm', help="""Use Batch Normalization,
+    if specified `use_global_stats` will be False so the batch statistics will
+    be updated during training and the newly added blocks will include
+    BatchNorm layers, otherwise the original BatchNorm layers will be kept but
+    will use the previous statistics. Only makes sense when the batch size per
+    device is greater than one.""", action='store_true')
 
 # ResNet params
 parser.add_argument('-n', '--num_output_stage1', help="""Number of filters in
-    stage 1 of resnet""", type=int, default=128)
+    stage 1 of resnet""", type=int, default=256)
 parser.add_argument('-b', '--blocks', type=int, nargs='+', help="""Number of
     Blocks in the 4 resnet stages""", default=[3, 4, 6, 3])
 parser.add_argument('-m', '--main_branch', help="""normal, bottleneck""",
@@ -77,23 +98,25 @@ parser.add_argument('--skip_source_layer', nargs='*',
 
 # SSD params
 parser.add_argument('--mbox_source_layers', nargs='+', help="""Names of layers
-    where detection heads will be attached""", default=['res3d_relu',
-                                                        'res4f_relu',
-                                                        'res5c_relu',
-                                                        'res6b_relu',
-                                                        'res7b_relu',
-                                                        'pool_last'])
+                    where detection heads will be attached""",
+                    default=['res3d_relu',
+                             'res4f_relu',
+                             'res5c_relu',
+                             'res6b_relu',
+                             'res7b_relu',
+                             'pool_last'])
 parser.add_argument('--extra_blocks', type=int, nargs='*', help="""Number of
-    extra Blocks to be attached to Detection network""", default=[2, 2])
+                    extra Blocks to be attached to Detection network""",
+                    default=[2, 2])
 parser.add_argument('--extra_num_outputs', type=int, nargs='*', help="""Number
-    of outputs of extra blocks Detection network""", default=[1024, 1024])
+                    of outputs of extra blocks Detection network""",
+                    default=[1024, 1024])
 parser.add_argument('-c', '--num_classes', help="""Number of classes in
-    detection dataset""", type=int, default=21)
-parser.add_argument('--min_dim', help="""Minimum dimension of input image""",
-                    type=int, default=300)
+                    detection dataset""", type=int, default=21)
 
 
 if __name__ == '__main__':
+    os.chdir(PROJECT_ROOT)
 
     args = parser.parse_args()
 
@@ -103,7 +126,10 @@ if __name__ == '__main__':
         n_layers = sum(map(lambda x: x*layers_x_block, args.blocks)) + 2
     else:
         raise NotImplementedError("This type of base network is not supported")
-    print "Creating", args.type, n_layers, "with", args.tasks
+
+    print ""
+    print "Creating", args.type, n_layers, "with", args.tasks.upper()
+    print ""
 
     num_gpus = len(args.gpu_list)
     if num_gpus > 0:
@@ -113,28 +139,40 @@ if __name__ == '__main__':
         num_gpus = 1
     iter_size = args.batch_size / (args.batch_size_per_device *
                                    num_gpus)
+
+    print "======================="
+    print "Using ", "GPU" if solver_mode else "CPU"
     print "Accum batch size: ", (iter_size * num_gpus *
                                  args.batch_size_per_device)
     print "Iteration size: ", iter_size
     print "Batch size x {} dev: ".format(num_gpus), args.batch_size_per_device
-
+    print "======================="
+    print "Parameters:"
+    for param in args.__dict__.items():
+        print "    ", param[0], param[1]
+    print "=======================\n"
     # Count number of test images
-    if args.name_size_file is not "":
-        if os.path.exists(args.name_size_file):
-            with open(args.name_size_file, 'r') as f:
+    name_size_file = expand(args.name_size_file)
+    if name_size_file is not "":
+        if os.path.exists(name_size_file):
+            with open(name_size_file, 'r') as f:
                 num_test_image = len(f.readlines())
     elif args.num_test_image > 0:
         num_test_image = args.num_test_image
     else:
         num_test_image = 0
+
     if args.output_folder == "":
-        output_folder = os.path.expandvars("$HOME/data")
+        output_folder = expand("$HOME/data")
     else:
-        output_folder = os.path.expandvars(args.output_folder)
+        output_folder = expand(args.output_folder)
 
     # Create output directory if not existent, will overwrite previous content
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
+    else:
+        overwrite = raw_input("Output folder exists, overwrite? (Y/n): ")
+        assert(overwrite == "y" or overwrite == "")
     if not os.path.exists(os.path.join(output_folder, 'snapshots')):
         os.makedirs(os.path.join(output_folder, 'snapshots'))
 
@@ -150,18 +188,22 @@ if __name__ == '__main__':
                       skip_source_layer=args.skip_source_layer,
                       tasks=args.tasks,
                       min_dim=args.min_dim,
-                      num_test_image=num_test_image)
+                      num_test_image=num_test_image,
+                      use_batchnorm=args.use_batchnorm,
+                      n_cores=args.n_cores,
+                      do_prefetch=not args.no_prefetch,
+                      do_parallel=not args.no_parallel)
 
     # TRAIN NET
     if args.data_dir_train == "":
         print "Warning! Data dir for train set not specified"
     if args.type == 'ResNet':
         res_params['phase'] = 'train'
-        res_params['data_dir'] = args.data_dir_train
+        res_params['data_dir'] = expand(args.data_dir_train)
         res_params['batch_size_per_device'] = args.batch_size_per_device
-        res_params['label_map_file'] = args.label_map_file
-        res_params['name_size_file'] = args.name_size_file
-        res_params['test_out_dir'] = args.test_out_dir
+        res_params['label_map_file'] = expand(args.label_map_file)
+        res_params['name_size_file'] = name_size_file
+        res_params['test_out_dir'] = expand(args.test_out_dir)
         netspec = get_resnet_multi(res_params)
         name = 'multiResnet'+str(n_layers)
     else:
@@ -201,8 +243,8 @@ if __name__ == '__main__':
         print "Warning! Data dir for test set not specified"
     if args.type == 'ResNet':
         res_params['phase'] = 'test'
-        res_params['data_dir'] = args.data_dir_test
-        res_params['batch_size_per_device'] = 1
+        res_params['data_dir'] = expand(args.data_dir_test)
+        res_params['batch_size_per_device'] = args.batch_size_test
         netspec = get_resnet_multi(res_params)
     else:
         raise NotImplementedError("This type of base network is not supported")
@@ -250,8 +292,12 @@ if __name__ == '__main__':
         print >> fp, '--solver="{}" \\'.format(
             os.path.join(output_folder, 'solver.prototxt'))
         if args.weights != '':
-            print >> fp, '--weights="{}" \\'.format(os.path.abspath(
-                args.weights))
+            if ".solverstate" in args.weights:
+                print >> fp, '--snapshot="{}" \\'.format(expand(args.weights))
+            elif ".caffemodel" in args.weights:
+                print >> fp, '--weights="{}" \\'.format(expand(args.weights))
+            else:
+                raise Exception("File format for weights not recognized")
         if len(args.gpu_list) > 0:
             print >> fp, '--gpu {} 2>&1  | tee {}'.format(
                 ",".join(str(x) for x in args.gpu_list),
@@ -263,4 +309,7 @@ if __name__ == '__main__':
             )
 
     print "Created train script"
+
+    print ""
     print "Model ready to train!"
+    print ""
