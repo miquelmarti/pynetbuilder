@@ -146,4 +146,4 @@ class SegScoreLayer(BaseLego):
         python_param = dict(module=self.module, layer=self.pylayer,
                             param_str=str(self.pydata_params))
         netspec.seg_scores = L.Python(bottom[0], bottom[1], bottom[2],
-                     python_param=python_param,  ntop=0)
+                                      python_param=python_param,  ntop=0)
