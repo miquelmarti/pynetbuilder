@@ -24,7 +24,10 @@ class ResNetLego(BaseLego):
         self.main_branch = params['main_branch']
         self.num_output_stage1 = params['num_output_stage1']
         self.blocks = params['blocks']
-        self.use_global_stats = params['use_global_stats']
+        if self.phase == "train":
+            self.use_global_stats = params['use_global_stats']
+        else:
+            self.use_global_stats = True
 
     def attach(self, netspec, bottom):
         from lego.hybrid import ConvBNReLULego, ShortcutLego
