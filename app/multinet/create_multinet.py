@@ -153,12 +153,12 @@ if __name__ == '__main__':
     print "=======================\n"
     # Count number of test images
     name_size_file = expand(args.name_size_file)
-    if name_size_file is not "":
+    if args.num_test_image > 0:
+        num_test_image = args.num_test_image
+    elif name_size_file is not "":
         if os.path.exists(name_size_file):
             with open(name_size_file, 'r') as f:
                 num_test_image = len(f.readlines())
-    elif args.num_test_image > 0:
-        num_test_image = args.num_test_image
     else:
         num_test_image = 0
 
