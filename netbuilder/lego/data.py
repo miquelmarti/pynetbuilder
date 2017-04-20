@@ -302,12 +302,11 @@ class VOCSegDetDataLego(BaseLego):
         self._required = ['list_file', 'batch_size']
         self._check_required_params(params)
         batch_size = params['batch_size']
+        resize_dim = params['resize_dim'] if 'resize_dim' in params.keys() else\
+            None
+        crop_dim = params['crop_dim'] if 'crop_dim' in params.keys() else None
         if batch_size > 1:
-            self._required.append('resize_dim')
-            self._check_required_params(params)
-            resize_dim = params['resize_dim']
-        else:
-            resize_dim = None
+            assert resize_dim is not None or crop_dim is not None
         self.pydata_params = deepcopy(params)
         self.pydata_params.update(dict(mean=(104, 117, 123), seed=1337))
         self.pylayer = 'VOCSegDetDataLayer'

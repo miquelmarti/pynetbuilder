@@ -32,6 +32,7 @@ def get_resnet_multi(params):
     num_output_stage1 = params['num_output_stage1']
     blocks = params['blocks']
     attach_layer = params['attach_layer']
+    ssd_attach_layer = params['ssd_attach_layer']
 
     use_batchnorm = params['use_batchnorm']
 
@@ -57,6 +58,7 @@ def get_resnet_multi(params):
         data_params = dict(phase=phase, list_file=source,
                            batch_size=batch_size_per_device,
                            resize_dim=min_dim, n_cores=n_cores,
+                           crop_dim=min_dim,
                            do_parallel=do_parallel, do_prefetch=do_prefetch)
         data, seg_label, det_label = VOCSegDetDataLego(
             data_params).attach(netspec)
@@ -92,7 +94,7 @@ def get_resnet_multi(params):
                                extra_num_outputs=extra_num_outputs,
                                use_bn=use_batchnorm)
         extra_last = SSDExtraLayersLego(extrassd_params).attach(
-            netspec, [netspec[attach_layer]])
+            netspec, [netspec[ssd_attach_layer]])
 
         # TODO: Parametrize this values
         min_ratio = 20

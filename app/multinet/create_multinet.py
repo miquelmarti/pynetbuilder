@@ -113,6 +113,9 @@ parser.add_argument('--extra_num_outputs', type=int, nargs='*', help="""Number
                     default=[1024, 1024])
 parser.add_argument('-c', '--num_classes', help="""Number of classes in
                     detection dataset""", type=int, default=21)
+parser.add_argument('--ssd_attach_layer',
+                    help="""Name of layer where SSD extra blocks will be
+                    attached""", default=None)
 
 
 if __name__ == '__main__':
@@ -176,6 +179,9 @@ if __name__ == '__main__':
     if not os.path.exists(os.path.join(output_folder, 'snapshots')):
         os.makedirs(os.path.join(output_folder, 'snapshots'))
 
+    if args.ssd_attach_layer is None:
+        args.ssd_attach_layer = args.attach_layer
+
     res_params = dict(main_branch=args.main_branch,
                       data_layer=args.data_layer,
                       num_output_stage1=args.num_output_stage1,
@@ -184,6 +190,7 @@ if __name__ == '__main__':
                       extra_num_outputs=args.extra_num_outputs,
                       mbox_source_layers=args.mbox_source_layers,
                       attach_layer=args.attach_layer,
+                      ssd_attach_layer=args.ssd_attach_layer,
                       num_classes=args.num_classes,
                       skip_source_layer=args.skip_source_layer,
                       tasks=args.tasks,
